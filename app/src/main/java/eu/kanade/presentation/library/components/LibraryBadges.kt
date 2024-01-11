@@ -1,20 +1,19 @@
 package eu.kanade.presentation.library.components
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.res.stringResource
-import eu.kanade.presentation.components.Badge
-import eu.kanade.tachiyomi.R
-import eu.kanade.tachiyomi.ui.library.LibraryItem
+import androidx.compose.ui.tooling.preview.PreviewLightDark
+import eu.kanade.presentation.theme.TachiyomiTheme
+import tachiyomi.presentation.core.components.Badge
 
 @Composable
-fun DownloadsBadge(
-    enabled: Boolean,
-    item: LibraryItem,
-) {
-    if (enabled && item.downloadCount > 0) {
+internal fun DownloadsBadge(count: Long) {
+    if (count > 0) {
         Badge(
-            text = "${item.downloadCount}",
+            text = "$count",
             color = MaterialTheme.colorScheme.tertiary,
             textColor = MaterialTheme.colorScheme.onTertiary,
         )
@@ -22,32 +21,41 @@ fun DownloadsBadge(
 }
 
 @Composable
-fun UnreadBadge(
-    enabled: Boolean,
-    item: LibraryItem,
-) {
-    if (enabled && item.unreadCount > 0) {
-        Badge(text = "${item.unreadCount}")
+internal fun UnviewedBadge(count: Long) {
+    if (count > 0) {
+        Badge(text = "$count")
     }
 }
 
 @Composable
-fun LanguageBadge(
-    showLanguage: Boolean,
-    showLocal: Boolean,
-    item: LibraryItem,
+internal fun LanguageBadge(
+    isLocal: Boolean,
+    sourceLanguage: String,
 ) {
-    if (showLocal && item.isLocal) {
+    if (isLocal) {
         Badge(
-            text = stringResource(R.string.local_source_badge),
+            imageVector = Icons.Outlined.Folder,
+            color = MaterialTheme.colorScheme.tertiary,
+            iconColor = MaterialTheme.colorScheme.onTertiary,
+        )
+    } else if (sourceLanguage.isNotEmpty()) {
+        Badge(
+            text = sourceLanguage.uppercase(),
             color = MaterialTheme.colorScheme.tertiary,
             textColor = MaterialTheme.colorScheme.onTertiary,
         )
-    } else if (showLanguage && item.sourceLanguage.isNotEmpty()) {
-        Badge(
-            text = item.sourceLanguage.uppercase(),
-            color = MaterialTheme.colorScheme.tertiary,
-            textColor = MaterialTheme.colorScheme.onTertiary,
-        )
+    }
+}
+
+@PreviewLightDark
+@Composable
+private fun BadgePreview() {
+    TachiyomiTheme {
+        Column {
+            DownloadsBadge(count = 10)
+            UnviewedBadge(count = 10)
+            LanguageBadge(isLocal = true, sourceLanguage = "EN")
+            LanguageBadge(isLocal = false, sourceLanguage = "EN")
+        }
     }
 }

@@ -1,80 +1,94 @@
 package eu.kanade.presentation.more.settings.screen
 
-import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.fragment.app.FragmentActivity
-import eu.kanade.domain.base.BasePreferences
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.presentation.more.settings.Preference
-import eu.kanade.tachiyomi.R
-import eu.kanade.tachiyomi.extension.ExtensionUpdateJob
+import eu.kanade.presentation.more.settings.screen.browse.AnimeExtensionReposScreen
+import eu.kanade.presentation.more.settings.screen.browse.MangaExtensionReposScreen
 import eu.kanade.tachiyomi.util.system.AuthenticatorUtil.authenticate
+import kotlinx.collections.immutable.persistentListOf
+import tachiyomi.core.i18n.stringResource
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.pluralStringResource
+import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
-class SettingsBrowseScreen : SearchableSettings {
+object SettingsBrowseScreen : SearchableSettings {
 
     @ReadOnlyComposable
     @Composable
-    @StringRes
-    override fun getTitleRes() = R.string.browse
+    override fun getTitleRes() = MR.strings.browse
 
     @Composable
     override fun getPreferences(): List<Preference> {
         val context = LocalContext.current
+        val navigator = LocalNavigator.currentOrThrow
+
         val sourcePreferences = remember { Injekt.get<SourcePreferences>() }
-        val preferences = remember { Injekt.get<BasePreferences>() }
+        val mangaReposCount by sourcePreferences.mangaExtensionRepos().collectAsState()
+        val animeReposCount by sourcePreferences.animeExtensionRepos().collectAsState()
+
         return listOf(
             Preference.PreferenceGroup(
-                title = stringResource(R.string.label_sources),
-                preferenceItems = listOf(
+                title = stringResource(MR.strings.label_sources),
+                preferenceItems = persistentListOf(
                     Preference.PreferenceItem.SwitchPreference(
-                        pref = sourcePreferences.duplicatePinnedSources(),
-                        title = stringResource(R.string.pref_duplicate_pinned_sources),
-                        subtitle = stringResource(R.string.pref_duplicate_pinned_sources_summary),
+                        pref = sourcePreferences.hideInAnimeLibraryItems(),
+                        title = stringResource(MR.strings.pref_hide_in_anime_library_items),
                     ),
-                ),
-            ),
-            Preference.PreferenceGroup(
-                title = stringResource(R.string.label_extensions),
-                preferenceItems = listOf(
                     Preference.PreferenceItem.SwitchPreference(
-                        pref = preferences.automaticExtUpdates(),
-                        title = stringResource(R.string.pref_enable_automatic_extension_updates),
-                        onValueChanged = {
-                            ExtensionUpdateJob.setupTask(context, it)
-                            true
+                        pref = sourcePreferences.hideInMangaLibraryItems(),
+                        title = stringResource(MR.strings.pref_hide_in_manga_library_items),
+                    ),
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(MR.strings.label_anime_extension_repos),
+                        subtitle = pluralStringResource(
+                            MR.plurals.num_repos,
+                            animeReposCount.size,
+                            animeReposCount.size,
+                        ),
+                        onClick = {
+                            navigator.push(AnimeExtensionReposScreen())
+                        },
+                    ),
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(MR.strings.label_manga_extension_repos),
+                        subtitle = pluralStringResource(
+                            MR.plurals.num_repos,
+                            mangaReposCount.size,
+                            mangaReposCount.size,
+                        ),
+                        onClick = {
+                            navigator.push(MangaExtensionReposScreen())
                         },
                     ),
                 ),
             ),
             Preference.PreferenceGroup(
-                title = stringResource(R.string.action_global_search),
-                preferenceItems = listOf(
-                    Preference.PreferenceItem.SwitchPreference(
-                        pref = sourcePreferences.searchPinnedSourcesOnly(),
-                        title = stringResource(R.string.pref_search_pinned_sources_only),
-                    ),
-                ),
-            ),
-            Preference.PreferenceGroup(
-                title = stringResource(R.string.pref_category_nsfw_content),
-                preferenceItems = listOf(
+                title = stringResource(MR.strings.pref_category_nsfw_content),
+                preferenceItems = persistentListOf(
                     Preference.PreferenceItem.SwitchPreference(
                         pref = sourcePreferences.showNsfwSource(),
-                        title = stringResource(R.string.pref_show_nsfw_source),
-                        subtitle = stringResource(R.string.requires_app_restart),
+                        title = stringResource(MR.strings.pref_show_nsfw_source),
+                        subtitle = stringResource(MR.strings.requires_app_restart),
                         onValueChanged = {
                             (context as FragmentActivity).authenticate(
-                                title = context.getString(R.string.pref_category_nsfw_content),
+                                title = context.stringResource(MR.strings.pref_category_nsfw_content),
                             )
                         },
                     ),
-                    Preference.PreferenceItem.InfoPreference(stringResource(R.string.parental_controls_info)),
+                    Preference.PreferenceItem.InfoPreference(
+                        stringResource(MR.strings.parental_controls_info),
+                    ),
                 ),
             ),
         )

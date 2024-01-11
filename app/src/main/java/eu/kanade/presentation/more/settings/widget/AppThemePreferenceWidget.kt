@@ -1,7 +1,6 @@
 package eu.kanade.presentation.more.settings.widget
 
-import android.content.res.Configuration.UI_MODE_NIGHT_YES
-import androidx.compose.animation.animateContentSize
+import android.app.Activity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -36,28 +37,28 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
+import androidx.core.app.ActivityCompat
 import eu.kanade.domain.ui.model.AppTheme
-import eu.kanade.presentation.components.DIVIDER_ALPHA
-import eu.kanade.presentation.components.MangaCover
+import eu.kanade.presentation.entries.components.ItemCover
 import eu.kanade.presentation.theme.TachiyomiTheme
-import eu.kanade.presentation.util.secondaryItemAlpha
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.util.system.DeviceUtil
 import eu.kanade.tachiyomi.util.system.isDynamicColorAvailable
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.components.material.padding
+import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.secondaryItemAlpha
 
 @Composable
 internal fun AppThemePreferenceWidget(
-    title: String,
     value: AppTheme,
     amoled: Boolean,
     onItemClick: (AppTheme) -> Unit,
 ) {
     BasePreferenceWidget(
-        title = title,
         subcomponent = {
             AppThemesList(
                 currentTheme = value,
@@ -74,16 +75,14 @@ private fun AppThemesList(
     amoled: Boolean,
     onItemClick: (AppTheme) -> Unit,
 ) {
+    val context = LocalContext.current
     val appThemes = remember {
-        AppTheme.values()
-            .filterNot { it.titleResId == null || (it == AppTheme.MONET && !DeviceUtil.isDynamicColorAvailable) }
+        AppTheme.entries
+            .filterNot { it.titleRes == null || (it == AppTheme.MONET && !DeviceUtil.isDynamicColorAvailable) }
     }
     LazyRow(
-        modifier = Modifier
-            .animateContentSize()
-            .padding(vertical = 8.dp),
         contentPadding = PaddingValues(horizontal = PrefsHorizontalPadding),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
     ) {
         items(
             items = appThemes,
@@ -100,19 +99,23 @@ private fun AppThemesList(
                 ) {
                     AppThemePreviewItem(
                         selected = currentTheme == appTheme,
-                        onClick = { onItemClick(appTheme) },
+                        onClick = {
+                            onItemClick(appTheme)
+                            (context as? Activity)?.let { ActivityCompat.recreate(it) }
+                        },
                     )
                 }
 
+                Spacer(modifier = Modifier.height(8.dp))
+
                 Text(
-                    text = stringResource(appTheme.titleResId!!),
+                    text = stringResource(appTheme.titleRes!!),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 8.dp)
                         .secondaryItemAlpha(),
-                    color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center,
                     maxLines = 2,
+                    minLines = 2,
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
@@ -125,7 +128,6 @@ fun AppThemePreviewItem(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val dividerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = DIVIDER_ALPHA)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -135,7 +137,7 @@ fun AppThemePreviewItem(
                 color = if (selected) {
                     MaterialTheme.colorScheme.primary
                 } else {
-                    dividerColor
+                    DividerDefaults.color
                 },
                 shape = RoundedCornerShape(17.dp),
             )
@@ -170,7 +172,7 @@ fun AppThemePreviewItem(
                 if (selected) {
                     Icon(
                         imageVector = Icons.Filled.CheckCircle,
-                        contentDescription = stringResource(R.string.selected),
+                        contentDescription = stringResource(MR.strings.selected),
                         tint = MaterialTheme.colorScheme.primary,
                     )
                 }
@@ -182,11 +184,11 @@ fun AppThemePreviewItem(
             modifier = Modifier
                 .padding(start = 8.dp, top = 2.dp)
                 .background(
-                    color = dividerColor,
+                    color = DividerDefaults.color,
                     shape = MaterialTheme.shapes.small,
                 )
                 .fillMaxWidth(0.5f)
-                .aspectRatio(MangaCover.Book.ratio),
+                .aspectRatio(ItemCover.Book.ratio),
         ) {
             Row(
                 modifier = Modifier
@@ -252,23 +254,17 @@ fun AppThemePreviewItem(
     }
 }
 
-@Preview(
-    name = "light",
-    showBackground = true,
-)
-@Preview(
-    name = "dark",
-    showBackground = true,
-    uiMode = UI_MODE_NIGHT_YES,
-)
+@PreviewLightDark
 @Composable
 private fun AppThemesListPreview() {
     var appTheme by remember { mutableStateOf(AppTheme.DEFAULT) }
     TachiyomiTheme {
-        AppThemesList(
-            currentTheme = appTheme,
-            amoled = false,
-            onItemClick = { appTheme = it },
-        )
+        Surface {
+            AppThemesList(
+                currentTheme = appTheme,
+                amoled = false,
+                onItemClick = { appTheme = it },
+            )
+        }
     }
 }

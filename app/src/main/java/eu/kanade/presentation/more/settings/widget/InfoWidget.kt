@@ -1,6 +1,5 @@
 package eu.kanade.presentation.more.settings.widget
 
-import android.content.res.Configuration.UI_MODE_NIGHT_YES
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
@@ -12,20 +11,23 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import eu.kanade.presentation.theme.TachiyomiTheme
-import eu.kanade.presentation.util.secondaryItemAlpha
-import eu.kanade.tachiyomi.R
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.components.material.padding
+import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.secondaryItemAlpha
 
 @Composable
 internal fun InfoWidget(text: String) {
     Column(
         modifier = Modifier
-            .padding(horizontal = PrefsHorizontalPadding, vertical = 16.dp)
+            .padding(
+                horizontal = PrefsHorizontalPadding,
+                vertical = MaterialTheme.padding.medium,
+            )
             .secondaryItemAlpha(),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.medium),
     ) {
         Icon(
             imageVector = Icons.Outlined.Info,
@@ -38,21 +40,12 @@ internal fun InfoWidget(text: String) {
     }
 }
 
-@Preview(
-    name = "Light",
-    showBackground = true,
-)
-@Preview(
-    name = "Dark",
-    showBackground = true,
-    uiMode = UI_MODE_NIGHT_YES,
-
-)
+@PreviewLightDark
 @Composable
 private fun InfoWidgetPreview() {
     TachiyomiTheme {
         Surface {
-            InfoWidget(text = stringResource(id = R.string.download_ahead_info))
+            InfoWidget(text = stringResource(MR.strings.download_ahead_info))
         }
     }
 }

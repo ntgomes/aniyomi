@@ -1,9 +1,11 @@
 package eu.kanade.tachiyomi.ui.reader.setting
 
-import eu.kanade.tachiyomi.core.preference.PreferenceStore
-import eu.kanade.tachiyomi.core.preference.getEnum
-import eu.kanade.tachiyomi.data.preference.PreferenceValues
-import eu.kanade.tachiyomi.util.system.isReleaseBuildType
+import android.os.Build
+import androidx.compose.ui.graphics.BlendMode
+import dev.icerock.moko.resources.StringResource
+import tachiyomi.core.preference.PreferenceStore
+import tachiyomi.core.preference.getEnum
+import tachiyomi.i18n.MR
 
 class ReaderPreferences(
     private val preferenceStore: PreferenceStore,
@@ -13,12 +15,15 @@ class ReaderPreferences(
 
     fun pageTransitions() = preferenceStore.getBoolean("pref_enable_transitions_key", true)
 
+    fun flashOnPageChange() = preferenceStore.getBoolean("pref_reader_flash", false)
+
     fun doubleTapAnimSpeed() = preferenceStore.getInt("pref_double_tap_anim_speed", 500)
 
     fun showPageNumber() = preferenceStore.getBoolean("pref_show_page_number_key", true)
 
     fun showReadingMode() = preferenceStore.getBoolean("pref_show_reading_mode", true)
 
+    // TODO: default this to true if reader long strip ever goes stable
     fun trueColor() = preferenceStore.getBoolean("pref_true_color_key", false)
 
     fun fullscreen() = preferenceStore.getBoolean("fullscreen", true)
@@ -27,12 +32,20 @@ class ReaderPreferences(
 
     fun keepScreenOn() = preferenceStore.getBoolean("pref_keep_screen_on_key", true)
 
-    fun defaultReadingMode() = preferenceStore.getInt("pref_default_reading_mode_key", ReadingModeType.RIGHT_TO_LEFT.flagValue)
+    fun defaultReadingMode() = preferenceStore.getInt(
+        "pref_default_reading_mode_key",
+        ReadingMode.RIGHT_TO_LEFT.flagValue,
+    )
 
-    fun defaultOrientationType() = preferenceStore.getInt("pref_default_orientation_type_key", OrientationType.FREE.flagValue)
+    fun defaultOrientationType() = preferenceStore.getInt(
+        "pref_default_orientation_type_key",
+        ReaderOrientation.FREE.flagValue,
+    )
 
-    // TODO: Enable in release build when the feature is stable
-    fun longStripSplitWebtoon() = preferenceStore.getBoolean("pref_long_strip_split_webtoon", !isReleaseBuildType)
+    fun webtoonDoubleTapZoomEnabled() = preferenceStore.getBoolean(
+        "pref_enable_double_tap_zoom_webtoon",
+        true,
+    )
 
     fun imageScaleType() = preferenceStore.getInt("pref_image_scale_type_key", 1)
 
@@ -40,9 +53,15 @@ class ReaderPreferences(
 
     fun readerTheme() = preferenceStore.getInt("pref_reader_theme_key", 1)
 
-    fun alwaysShowChapterTransition() = preferenceStore.getBoolean("always_show_chapter_transition", true)
+    fun alwaysShowChapterTransition() = preferenceStore.getBoolean(
+        "always_show_chapter_transition",
+        true,
+    )
 
-    fun preserveReadingPosition() = preferenceStore.getBoolean("pref_preserve_reading_position", false)
+    fun preserveReadingPosition() = preferenceStore.getBoolean(
+        "pref_preserve_reading_position",
+        false,
+    )
 
     fun cropBorders() = preferenceStore.getBoolean("crop_borders", false)
 
@@ -52,15 +71,17 @@ class ReaderPreferences(
 
     fun cropBordersWebtoon() = preferenceStore.getBoolean("crop_borders_webtoon", false)
 
-    fun webtoonSidePadding() = preferenceStore.getInt("webtoon_side_padding", 0)
+    fun webtoonSidePadding() = preferenceStore.getInt("webtoon_side_padding", WEBTOON_PADDING_MIN)
 
-    fun readerHideThreshold() = preferenceStore.getEnum("reader_hide_threshold", PreferenceValues.ReaderHideThreshold.LOW)
+    fun readerHideThreshold() = preferenceStore.getEnum("reader_hide_threshold", ReaderHideThreshold.LOW)
 
     fun folderPerManga() = preferenceStore.getBoolean("create_folder_per_manga", false)
 
     fun skipRead() = preferenceStore.getBoolean("skip_read", false)
 
     fun skipFiltered() = preferenceStore.getBoolean("skip_filtered", true)
+
+    fun skipDupe() = preferenceStore.getBoolean("skip_dupe", false)
 
     // endregion
 
@@ -73,6 +94,23 @@ class ReaderPreferences(
     fun dualPageSplitWebtoon() = preferenceStore.getBoolean("pref_dual_page_split_webtoon", false)
 
     fun dualPageInvertWebtoon() = preferenceStore.getBoolean("pref_dual_page_invert_webtoon", false)
+
+    fun dualPageRotateToFit() = preferenceStore.getBoolean("pref_dual_page_rotate", false)
+
+    fun dualPageRotateToFitInvert() = preferenceStore.getBoolean(
+        "pref_dual_page_rotate_invert",
+        false,
+    )
+
+    fun dualPageRotateToFitWebtoon() = preferenceStore.getBoolean(
+        "pref_dual_page_rotate_webtoon",
+        false,
+    )
+
+    fun dualPageRotateToFitInvertWebtoon() = preferenceStore.getBoolean(
+        "pref_dual_page_rotate_invert_webtoon",
+        false,
+    )
 
     // endregion
 
@@ -100,19 +138,105 @@ class ReaderPreferences(
 
     fun readWithVolumeKeys() = preferenceStore.getBoolean("reader_volume_keys", false)
 
-    fun readWithVolumeKeysInverted() = preferenceStore.getBoolean("reader_volume_keys_inverted", false)
+    fun readWithVolumeKeysInverted() = preferenceStore.getBoolean(
+        "reader_volume_keys_inverted",
+        false,
+    )
 
     fun navigationModePager() = preferenceStore.getInt("reader_navigation_mode_pager", 0)
 
     fun navigationModeWebtoon() = preferenceStore.getInt("reader_navigation_mode_webtoon", 0)
 
-    fun pagerNavInverted() = preferenceStore.getEnum("reader_tapping_inverted", PreferenceValues.TappingInvertMode.NONE)
+    fun pagerNavInverted() = preferenceStore.getEnum(
+        "reader_tapping_inverted",
+        TappingInvertMode.NONE,
+    )
 
-    fun webtoonNavInverted() = preferenceStore.getEnum("reader_tapping_inverted_webtoon", PreferenceValues.TappingInvertMode.NONE)
+    fun webtoonNavInverted() = preferenceStore.getEnum(
+        "reader_tapping_inverted_webtoon",
+        TappingInvertMode.NONE,
+    )
 
-    fun showNavigationOverlayNewUser() = preferenceStore.getBoolean("reader_navigation_overlay_new_user", true)
+    fun showNavigationOverlayNewUser() = preferenceStore.getBoolean(
+        "reader_navigation_overlay_new_user",
+        true,
+    )
 
-    fun showNavigationOverlayOnStart() = preferenceStore.getBoolean("reader_navigation_overlay_on_start", false)
+    fun showNavigationOverlayOnStart() = preferenceStore.getBoolean(
+        "reader_navigation_overlay_on_start",
+        false,
+    )
 
     // endregion
+
+    enum class TappingInvertMode(
+        val titleRes: StringResource,
+        val shouldInvertHorizontal: Boolean = false,
+        val shouldInvertVertical: Boolean = false,
+    ) {
+        NONE(MR.strings.tapping_inverted_none),
+        HORIZONTAL(MR.strings.tapping_inverted_horizontal, shouldInvertHorizontal = true),
+        VERTICAL(MR.strings.tapping_inverted_vertical, shouldInvertVertical = true),
+        BOTH(
+            MR.strings.tapping_inverted_both,
+            shouldInvertHorizontal = true,
+            shouldInvertVertical = true,
+        ),
+    }
+
+    enum class ReaderHideThreshold(val threshold: Int) {
+        HIGHEST(5),
+        HIGH(13),
+        LOW(31),
+        LOWEST(47),
+    }
+
+    companion object {
+        const val WEBTOON_PADDING_MIN = 0
+        const val WEBTOON_PADDING_MAX = 25
+
+        val TapZones = listOf(
+            MR.strings.label_default,
+            MR.strings.l_nav,
+            MR.strings.kindlish_nav,
+            MR.strings.edge_nav,
+            MR.strings.right_and_left_nav,
+            MR.strings.disabled_nav,
+        )
+
+        val ImageScaleType = listOf(
+            MR.strings.scale_type_fit_screen,
+            MR.strings.scale_type_stretch,
+            MR.strings.scale_type_fit_width,
+            MR.strings.scale_type_fit_height,
+            MR.strings.scale_type_original_size,
+            MR.strings.scale_type_smart_fit,
+        )
+
+        val ZoomStart = listOf(
+            MR.strings.zoom_start_automatic,
+            MR.strings.zoom_start_left,
+            MR.strings.zoom_start_right,
+            MR.strings.zoom_start_center,
+        )
+
+        val ColorFilterMode = buildList {
+            addAll(
+                listOf(
+                    MR.strings.label_default to BlendMode.SrcOver,
+                    MR.strings.filter_mode_multiply to BlendMode.Modulate,
+                    MR.strings.filter_mode_screen to BlendMode.Screen,
+                ),
+            )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                addAll(
+                    listOf(
+                        MR.strings.filter_mode_overlay to BlendMode.Overlay,
+                        MR.strings.filter_mode_lighten to BlendMode.Lighten,
+                        MR.strings.filter_mode_darken to BlendMode.Darken,
+                    ),
+                )
+            }
+        }
+    }
 }

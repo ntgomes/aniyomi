@@ -2,7 +2,6 @@ package eu.kanade.tachiyomi.crash
 
 import android.content.Context
 import android.content.Intent
-import eu.kanade.tachiyomi.util.system.logcat
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
@@ -11,6 +10,7 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
 import logcat.LogPriority
+import tachiyomi.core.util.system.logcat
 import kotlin.system.exitProcess
 
 class GlobalExceptionHandler private constructor(
@@ -72,7 +72,7 @@ class GlobalExceptionHandler private constructor(
             return try {
                 Json.decodeFromString(ThrowableSerializer, intent.getStringExtra(INTENT_EXTRA)!!)
             } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Wasn't able to retrive throwable from intent" }
+                logcat(LogPriority.ERROR, e) { "Wasn't able to retrieve throwable from intent" }
                 null
             }
         }

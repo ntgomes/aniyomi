@@ -1,9 +1,9 @@
 package eu.kanade.tachiyomi
 
 import android.annotation.SuppressLint
-import android.app.ActivityManager
 import android.app.Application
 import android.app.PendingIntent
+import android.app.job.JobInfo
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -11,9 +11,7 @@ import android.content.IntentFilter
 import android.os.Build
 import android.os.Looper
 import android.webkit.WebView
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.getSystemService
-import androidx.glance.appwidget.GlanceAppWidgetManager
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -24,9 +22,8 @@ import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
 import coil.disk.DiskCache
 import coil.util.DebugLogger
-import eu.kanade.data.AnimeDatabaseHandler
-import eu.kanade.data.DatabaseHandler
 import eu.kanade.domain.DomainModule
+import eu.kanade.domain.SYDomainModule
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.setAppCompatDelegateThemeMode
@@ -35,30 +32,41 @@ import eu.kanade.tachiyomi.crash.GlobalExceptionHandler
 import eu.kanade.tachiyomi.data.coil.AnimeCoverFetcher
 import eu.kanade.tachiyomi.data.coil.AnimeCoverKeyer
 import eu.kanade.tachiyomi.data.coil.AnimeKeyer
-import eu.kanade.tachiyomi.data.coil.DomainAnimeKeyer
-import eu.kanade.tachiyomi.data.coil.DomainMangaKeyer
 import eu.kanade.tachiyomi.data.coil.MangaCoverFetcher
 import eu.kanade.tachiyomi.data.coil.MangaCoverKeyer
 import eu.kanade.tachiyomi.data.coil.MangaKeyer
 import eu.kanade.tachiyomi.data.coil.TachiyomiImageDecoder
 import eu.kanade.tachiyomi.data.notification.Notifications
-import eu.kanade.tachiyomi.glance.AnimeUpdatesGridGlanceWidget
-import eu.kanade.tachiyomi.glance.UpdatesGridGlanceWidget
+import eu.kanade.tachiyomi.di.AppModule
+import eu.kanade.tachiyomi.di.PreferenceModule
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.NetworkPreferences
 import eu.kanade.tachiyomi.ui.base.delegate.SecureActivityDelegate
+import eu.kanade.tachiyomi.util.system.DeviceUtil
 import eu.kanade.tachiyomi.util.system.WebViewUtil
 import eu.kanade.tachiyomi.util.system.animatorDurationScale
-import eu.kanade.tachiyomi.util.system.logcat
-import eu.kanade.tachiyomi.util.system.notification
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.drop
+import eu.kanade.tachiyomi.util.system.cancelNotification
+import eu.kanade.tachiyomi.util.system.isPreviewBuildType
+import eu.kanade.tachiyomi.util.system.isReleaseBuildType
+import eu.kanade.tachiyomi.util.system.notify
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import logcat.AndroidLogcatLogger
 import logcat.LogPriority
 import logcat.LogcatLogger
+import org.acra.config.httpSender
+import org.acra.config.scheduler
+import org.acra.data.StringFormat
+import org.acra.ktx.initAcra
+import org.acra.sender.HttpSender
 import org.conscrypt.Conscrypt
+import tachiyomi.core.i18n.stringResource
+import tachiyomi.core.preference.Preference
+import tachiyomi.core.util.system.logcat
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.widget.entries.anime.AnimeWidgetManager
+import tachiyomi.presentation.widget.entries.manga.MangaWidgetManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
@@ -75,6 +83,7 @@ class App : Application(), DefaultLifecycleObserver, ImageLoaderFactory {
     override fun onCreate() {
         super<Application>.onCreate()
 
+        setupAcra()
         GlobalExceptionHandler.initialize(applicationContext, CrashActivity::class.java)
 
         // TLS 1.3 support for Android < 10
@@ -88,11 +97,13 @@ class App : Application(), DefaultLifecycleObserver, ImageLoaderFactory {
             if (packageName != process) WebView.setDataDirectorySuffix(process)
         }
 
-        Injekt.importModule(AppModule(this))
         Injekt.importModule(PreferenceModule(this))
+        Injekt.importModule(AppModule(this))
         Injekt.importModule(DomainModule())
+        // SY -->
+        Injekt.importModule(SYDomainModule())
+        // SY <--
 
-        setupAcra()
         setupNotificationChannels()
 
         ProcessLifecycleOwner.get().lifecycle.addObserver(this)
@@ -100,12 +111,14 @@ class App : Application(), DefaultLifecycleObserver, ImageLoaderFactory {
         // Show notification to disable Incognito Mode when it's enabled
         basePreferences.incognitoMode().changes()
             .onEach { enabled ->
-                val notificationManager = NotificationManagerCompat.from(this)
                 if (enabled) {
                     disableIncognitoReceiver.register()
-                    val notification = notification(Notifications.CHANNEL_INCOGNITO_MODE) {
-                        setContentTitle(getString(R.string.pref_incognito_mode))
-                        setContentText(getString(R.string.notification_incognito_text))
+                    notify(
+                        Notifications.ID_INCOGNITO_MODE,
+                        Notifications.CHANNEL_INCOGNITO_MODE,
+                    ) {
+                        setContentTitle(stringResource(MR.strings.pref_incognito_mode))
+                        setContentText(stringResource(MR.strings.notification_incognito_text))
                         setSmallIcon(R.drawable.ic_glasses_24dp)
                         setOngoing(true)
 
@@ -117,10 +130,9 @@ class App : Application(), DefaultLifecycleObserver, ImageLoaderFactory {
                         )
                         setContentIntent(pendingIntent)
                     }
-                    notificationManager.notify(Notifications.ID_INCOGNITO_MODE, notification)
                 } else {
                     disableIncognitoReceiver.unregister()
-                    notificationManager.cancel(Notifications.ID_INCOGNITO_MODE)
+                    cancelNotification(Notifications.ID_INCOGNITO_MODE)
                 }
             }
             .launchIn(ProcessLifecycleOwner.get().lifecycleScope)
@@ -128,29 +140,13 @@ class App : Application(), DefaultLifecycleObserver, ImageLoaderFactory {
         setAppCompatDelegateThemeMode(Injekt.get<UiPreferences>().themeMode().get())
 
         // Updates widget update
-        Injekt.get<DatabaseHandler>()
-            .subscribeToList { updatesViewQueries.updates(after = UpdatesGridGlanceWidget.DateLimit.timeInMillis) }
-            .drop(1)
-            .distinctUntilChanged()
-            .onEach {
-                val manager = GlanceAppWidgetManager(this)
-                if (manager.getGlanceIds(UpdatesGridGlanceWidget::class.java).isNotEmpty()) {
-                    UpdatesGridGlanceWidget().loadData(it)
-                }
-            }
-            .launchIn(ProcessLifecycleOwner.get().lifecycleScope)
+        with(MangaWidgetManager(Injekt.get(), Injekt.get())) {
+            init(ProcessLifecycleOwner.get().lifecycleScope)
+        }
 
-        Injekt.get<AnimeDatabaseHandler>()
-            .subscribeToList { animeupdatesViewQueries.animeupdates(after = AnimeUpdatesGridGlanceWidget.DateLimit.timeInMillis) }
-            .drop(1)
-            .distinctUntilChanged()
-            .onEach {
-                val manager = GlanceAppWidgetManager(this)
-                if (manager.getGlanceIds(AnimeUpdatesGridGlanceWidget::class.java).isNotEmpty()) {
-                    AnimeUpdatesGridGlanceWidget().loadData(it)
-                }
-            }
-            .launchIn(ProcessLifecycleOwner.get().lifecycleScope)
+        with(AnimeWidgetManager(Injekt.get(), Injekt.get())) {
+            init(ProcessLifecycleOwner.get().lifecycleScope)
+        }
 
         if (!LogcatLogger.isInstalled && networkPreferences.verboseLogging().get()) {
             LogcatLogger.install(AndroidLogcatLogger(LogPriority.VERBOSE))
@@ -168,24 +164,26 @@ class App : Application(), DefaultLifecycleObserver, ImageLoaderFactory {
                     add(GifDecoder.Factory())
                 }
                 add(TachiyomiImageDecoder.Factory())
-                add(MangaCoverFetcher.Factory(lazy(callFactoryInit), lazy(diskCacheInit)))
-                add(AnimeCoverFetcher.Factory(lazy(callFactoryInit), lazy(diskCacheInit)))
-                add(AnimeCoverFetcher.DomainAnimeFactory(lazy(callFactoryInit), lazy(diskCacheInit)))
+                add(MangaCoverFetcher.MangaFactory(lazy(callFactoryInit), lazy(diskCacheInit)))
+                add(AnimeCoverFetcher.AnimeFactory(lazy(callFactoryInit), lazy(diskCacheInit)))
                 add(AnimeCoverFetcher.AnimeCoverFactory(lazy(callFactoryInit), lazy(diskCacheInit)))
                 add(AnimeKeyer())
-                add(DomainAnimeKeyer())
-                add(MangaCoverFetcher.DomainMangaFactory(lazy(callFactoryInit), lazy(diskCacheInit)))
                 add(MangaCoverFetcher.MangaCoverFactory(lazy(callFactoryInit), lazy(diskCacheInit)))
                 add(MangaKeyer())
-                add(DomainMangaKeyer())
                 add(AnimeCoverKeyer())
                 add(MangaCoverKeyer())
             }
             callFactory(callFactoryInit)
             diskCache(diskCacheInit)
+            diskCache(diskCacheInit)
             crossfade((300 * this@App.animatorDurationScale).toInt())
-            allowRgb565(getSystemService<ActivityManager>()!!.isLowRamDevice)
+            allowRgb565(DeviceUtil.isLowRamDevice(this@App))
             if (networkPreferences.verboseLogging().get()) logger(DebugLogger())
+
+            // Coil spawns a new thread for every image load by default
+            fetcherDispatcher(Dispatchers.IO.limitedParallelism(8))
+            decoderDispatcher(Dispatchers.IO.limitedParallelism(2))
+            transformationDispatcher(Dispatchers.IO.limitedParallelism(2))
         }.build()
     }
 
@@ -212,14 +210,35 @@ class App : Application(), DefaultLifecycleObserver, ImageLoaderFactory {
                 if (chromiumElement?.methodName.equals("getAll", ignoreCase = true)) {
                     return WebViewUtil.SPOOF_PACKAGE_NAME
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
             }
         }
         return super.getPackageName()
     }
 
-    protected open fun setupAcra() {
-        // removed acra
+    private fun setupAcra() {
+        if (BuildConfig.ACRA_URI.isNotEmpty() && isPreviewBuildType || isReleaseBuildType) {
+            initAcra {
+                buildConfigClass = BuildConfig::class.java
+                excludeMatchingSharedPreferencesKeys = listOf(
+                    Preference.privateKey(".*"), ".*username.*", ".*password.*", ".*token.*",
+                )
+
+                reportFormat = StringFormat.JSON
+                httpSender {
+                    uri = BuildConfig.ACRA_URI
+                    basicAuthLogin = BuildConfig.ACRA_LOGIN
+                    basicAuthPassword = BuildConfig.ACRA_PASSWORD
+                    httpMethod = HttpSender.Method.POST
+                }
+
+                scheduler {
+                    requiresBatteryNotLow = true
+                    requiresDeviceIdle = true
+                    requiresNetworkType = JobInfo.NETWORK_TYPE_UNMETERED
+                }
+            }
+        }
     }
 
     private fun setupNotificationChannels() {
@@ -239,7 +258,12 @@ class App : Application(), DefaultLifecycleObserver, ImageLoaderFactory {
 
         fun register() {
             if (!registered) {
-                registerReceiver(this, IntentFilter(ACTION_DISABLE_INCOGNITO_MODE))
+                ContextCompat.registerReceiver(
+                    this@App,
+                    this,
+                    IntentFilter(ACTION_DISABLE_INCOGNITO_MODE),
+                    ContextCompat.RECEIVER_NOT_EXPORTED,
+                )
                 registered = true
             }
         }
@@ -258,9 +282,30 @@ private const val ACTION_DISABLE_INCOGNITO_MODE = "tachi.action.DISABLE_INCOGNIT
 /**
  * Direct copy of Coil's internal SingletonDiskCache so that [MangaCoverFetcher] can access it.
  */
-internal object CoilDiskCache {
+private object CoilDiskCache {
 
     private const val FOLDER_NAME = "image_cache"
+    private var instance: DiskCache? = null
+
+    @Synchronized
+    fun get(context: Context): DiskCache {
+        return instance ?: run {
+            val safeCacheDir = context.cacheDir.apply { mkdirs() }
+            // Create the singleton disk cache instance.
+            DiskCache.Builder()
+                .directory(safeCacheDir.resolve(FOLDER_NAME))
+                .build()
+                .also { instance = it }
+        }
+    }
+}
+
+/**
+ * Direct copy of Coil's internal SingletonDiskCache so that [MangaCoverFetcher] can access it.
+ */
+internal object CoilDiskCacheAnime {
+
+    private const val FOLDER_NAME = "anime_image_cache"
     private var instance: DiskCache? = null
 
     @Synchronized

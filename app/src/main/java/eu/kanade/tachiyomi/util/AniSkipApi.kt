@@ -3,24 +3,23 @@ package eu.kanade.tachiyomi.util
 import android.annotation.SuppressLint
 import android.view.View
 import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.databinding.PlayerActivityBinding
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.jsonMime
 import eu.kanade.tachiyomi.ui.player.PlayerActivity
-import eu.kanade.tachiyomi.util.lang.launchUI
 import `is`.xyz.mpv.MPVLib
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
+import tachiyomi.core.i18n.stringResource
+import tachiyomi.core.util.lang.withUIContext
+import tachiyomi.i18n.MR
 import uy.kohesive.injekt.injectLazy
 
 class AniSkipApi {
@@ -30,7 +29,8 @@ class AniSkipApi {
     // credits: https://github.com/saikou-app/saikou/blob/main/app/src/main/java/ani/saikou/others/AniSkip.kt
     fun getResult(malId: Int, episodeNumber: Int, episodeLength: Long): List<Stamp>? {
         val url =
-            "https://api.aniskip.com/v2/skip-times/$malId/$episodeNumber?types[]=ed&types[]=mixed-ed&types[]=mixed-op&types[]=op&types[]=recap&episodeLength=$episodeLength"
+            "https://api.aniskip.com/v2/skip-times/$malId/$episodeNumber?types[]=ed" +
+                "&types[]=mixed-ed&types[]=mixed-op&types[]=op&types[]=recap&episodeLength=$episodeLength"
         return try {
             val a = client.newCall(GET(url)).execute().body.string()
             val res = json.decodeFromString<AniSkipResponse>(a)
@@ -46,12 +46,17 @@ class AniSkipApi {
                 Media(id:$id){idMal}
                 }
         """.trimMargin()
-        val response = client.newCall(
-            POST(
-                "https://graphql.anilist.co",
-                body = buildJsonObject { put("query", query) }.toString().toRequestBody(jsonMime),
-            ),
-        ).execute()
+        val response = try {
+            client.newCall(
+                POST(
+                    "https://graphql.anilist.co",
+                    body = buildJsonObject { put("query", query) }.toString()
+                        .toRequestBody(jsonMime),
+                ),
+            ).execute()
+        } catch (e: Exception) {
+            return 0
+        }
         return response.body.string().substringAfter("idMal\":").substringBefore("}")
             .toLongOrNull() ?: 0
     }
@@ -63,22 +68,24 @@ class AniSkipApi {
         private val playerControls get() = binding.playerControls
         private val activity: PlayerActivity get() = binding.root.context as PlayerActivity
 
-        fun showSkipButton(skipType: SkipType) {
+        internal suspend fun showSkipButton(skipType: SkipType) {
             val skipButtonString = when (skipType) {
-                SkipType.ED -> R.string.player_aniskip_ed
-                SkipType.OP -> R.string.player_aniskip_op
-                SkipType.RECAP -> R.string.player_aniskip_recap
-                SkipType.MIXED_OP -> R.string.player_aniskip_mixedOp
+                SkipType.ED -> MR.strings.player_aniskip_ed
+                SkipType.OP -> MR.strings.player_aniskip_op
+                SkipType.RECAP -> MR.strings.player_aniskip_recap
+                SkipType.MIXED_OP -> MR.strings.player_aniskip_mixedOp
             }
-            launchUI {
-                playerControls.binding.controlsSkipIntroBtn.isVisible = true
-                playerControls.binding.controlsSkipIntroBtn.text = activity.getString(skipButtonString)
+            withUIContext {
+                playerControls.binding.controlsSkipIntroBtn.visibility = View.VISIBLE
+                playerControls.binding.controlsSkipIntroBtn.text = activity.stringResource(
+                    skipButtonString,
+                )
             }
         }
 
         // this is used when netflixStyle is enabled
         @SuppressLint("SetTextI18n")
-        fun showSkipButton(skipType: SkipType, waitingTime: Int) {
+        suspend fun showSkipButton(skipType: SkipType, waitingTime: Int) {
             val skipTime = when (skipType) {
                 SkipType.ED -> aniSkipResponse.first { it.skipType == SkipType.ED }.interval
                 SkipType.OP -> aniSkipResponse.first { it.skipType == SkipType.OP }.interval
@@ -87,9 +94,11 @@ class AniSkipApi {
             }
             if (waitingTime > -1) {
                 if (waitingTime > 0) {
-                    launchUI {
-                        playerControls.binding.controlsSkipIntroBtn.isVisible = true
-                        playerControls.binding.controlsSkipIntroBtn.text = activity.getString(R.string.player_aniskip_dontskip)
+                    withUIContext {
+                        playerControls.binding.controlsSkipIntroBtn.visibility = View.VISIBLE
+                        playerControls.binding.controlsSkipIntroBtn.text = activity.stringResource(
+                            MR.strings.player_aniskip_dontskip,
+                        )
                     }
                 } else {
                     seekTo(skipTime.endTime)
@@ -102,13 +111,16 @@ class AniSkipApi {
         }
 
         fun skipAnimation(skipType: SkipType) {
-            binding.secondsView.binding.doubleTapSeconds.text = activity.getString(R.string.player_aniskip_skip, skipType.getString())
+            binding.secondsView.binding.doubleTapSeconds.text = activity.stringResource(
+                MR.strings.player_aniskip_skip,
+                skipType.getString(),
+            )
 
             binding.secondsView.updateLayoutParams<ConstraintLayout.LayoutParams> {
                 rightToRight = ConstraintLayout.LayoutParams.PARENT_ID
                 leftToLeft = ConstraintLayout.LayoutParams.UNSET
             }
-            binding.secondsView.isVisible = true
+            binding.secondsView.visibility = View.VISIBLE
             binding.secondsView.isForward = true
 
             binding.ffwdBg.visibility = View.VISIBLE
@@ -117,7 +129,7 @@ class AniSkipApi {
                     binding.secondsView.animate().alpha(0f).setDuration(500).withEndAction {
                         binding.ffwdBg.animate().alpha(0f).setDuration(100).withEndAction {
                             binding.ffwdBg.visibility = View.GONE
-                            binding.secondsView.isVisible = false
+                            binding.secondsView.visibility = View.GONE
                             binding.secondsView.alpha = 1f
                         }
                     }

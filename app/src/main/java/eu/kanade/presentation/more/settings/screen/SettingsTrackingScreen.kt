@@ -1,8 +1,6 @@
 package eu.kanade.presentation.more.settings.screen
 
 import android.content.Context
-import android.widget.Toast
-import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -34,7 +32,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -42,38 +39,44 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.track.service.TrackPreferences
 import eu.kanade.presentation.more.settings.Preference
-import eu.kanade.tachiyomi.R
-import eu.kanade.tachiyomi.data.track.TrackManager
-import eu.kanade.tachiyomi.data.track.TrackService
+import eu.kanade.tachiyomi.data.track.EnhancedMangaTracker
+import eu.kanade.tachiyomi.data.track.Tracker
+import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.data.track.anilist.AnilistApi
 import eu.kanade.tachiyomi.data.track.bangumi.BangumiApi
 import eu.kanade.tachiyomi.data.track.myanimelist.MyAnimeListApi
 import eu.kanade.tachiyomi.data.track.shikimori.ShikimoriApi
 import eu.kanade.tachiyomi.data.track.simkl.SimklApi
-import eu.kanade.tachiyomi.source.SourceManager
-import eu.kanade.tachiyomi.util.lang.launchIO
-import eu.kanade.tachiyomi.util.lang.withUIContext
 import eu.kanade.tachiyomi.util.system.openInBrowser
 import eu.kanade.tachiyomi.util.system.toast
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
+import tachiyomi.core.i18n.stringResource
+import tachiyomi.core.util.lang.launchIO
+import tachiyomi.core.util.lang.withUIContext
+import tachiyomi.domain.source.manga.service.MangaSourceManager
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.components.material.padding
+import tachiyomi.presentation.core.i18n.stringResource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
-class SettingsTrackingScreen : SearchableSettings {
+object SettingsTrackingScreen : SearchableSettings {
 
     @ReadOnlyComposable
     @Composable
-    @StringRes
-    override fun getTitleRes() = R.string.pref_category_tracking
+    override fun getTitleRes() = MR.strings.pref_category_tracking
 
     @Composable
     override fun RowScope.AppBarAction() {
         val uriHandler = LocalUriHandler.current
-        IconButton(onClick = { uriHandler.openUri("https://tachiyomi.org/help/guides/tracking/") }) {
+        IconButton(onClick = { uriHandler.openUri("https://aniyomi.org/help/guides/tracking/") }) {
             Icon(
                 imageVector = Icons.Outlined.HelpOutline,
-                contentDescription = stringResource(R.string.tracking_guide),
+                contentDescription = stringResource(MR.strings.tracking_guide),
             )
         }
     }
@@ -82,121 +85,157 @@ class SettingsTrackingScreen : SearchableSettings {
     override fun getPreferences(): List<Preference> {
         val context = LocalContext.current
         val trackPreferences = remember { Injekt.get<TrackPreferences>() }
-        val trackManager = remember { Injekt.get<TrackManager>() }
+        val trackerManager = remember { Injekt.get<TrackerManager>() }
+        val sourceManager = remember { Injekt.get<MangaSourceManager>() }
 
         var dialog by remember { mutableStateOf<Any?>(null) }
         dialog?.run {
             when (this) {
                 is LoginDialog -> {
                     TrackingLoginDialog(
-                        service = service,
+                        tracker = tracker,
                         uNameStringRes = uNameStringRes,
                         onDismissRequest = { dialog = null },
                     )
                 }
                 is LogoutDialog -> {
                     TrackingLogoutDialog(
-                        service = service,
+                        tracker = tracker,
                         onDismissRequest = { dialog = null },
                     )
                 }
             }
         }
 
+        val enhancedMangaTrackers = trackerManager.trackers
+            .filter { it is EnhancedMangaTracker }
+            .partition { service ->
+                val acceptedMangaSources = (service as EnhancedMangaTracker).getAcceptedSources()
+                sourceManager.getCatalogueSources().any { it::class.qualifiedName in acceptedMangaSources }
+            }
+        var enhancedMangaTrackerInfo = stringResource(MR.strings.enhanced_tracking_info)
+        if (enhancedMangaTrackers.second.isNotEmpty()) {
+            val missingMangaSourcesInfo = stringResource(
+                MR.strings.enhanced_services_not_installed,
+                enhancedMangaTrackers.second.joinToString { it.name },
+            )
+            enhancedMangaTrackerInfo += "\n\n$missingMangaSourcesInfo"
+        }
+
         return listOf(
             Preference.PreferenceItem.SwitchPreference(
                 pref = trackPreferences.autoUpdateTrack(),
-                title = stringResource(R.string.pref_auto_update_manga_sync),
+                title = stringResource(MR.strings.pref_auto_update_manga_sync),
             ),
             Preference.PreferenceItem.SwitchPreference(
                 pref = trackPreferences.trackOnAddingToLibrary(),
-                title = stringResource(R.string.pref_track_on_add_library),
+                title = stringResource(MR.strings.pref_track_on_add_library),
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                pref = trackPreferences.showNextEpisodeAiringTime(),
+                title = stringResource(MR.strings.pref_show_next_episode_airing_time),
             ),
             Preference.PreferenceGroup(
-                title = stringResource(R.string.services),
-                preferenceItems = listOf(
-                    Preference.PreferenceItem.TrackingPreference(
-                        title = stringResource(trackManager.myAnimeList.nameRes()),
-                        service = trackManager.myAnimeList,
-                        login = { context.openInBrowser(MyAnimeListApi.authUrl(), forceDefaultBrowser = true) },
-                        logout = { dialog = LogoutDialog(trackManager.myAnimeList) },
-                    ),
-                    Preference.PreferenceItem.TrackingPreference(
-                        title = stringResource(trackManager.aniList.nameRes()),
-                        service = trackManager.aniList,
-                        login = { context.openInBrowser(AnilistApi.authUrl(), forceDefaultBrowser = true) },
-                        logout = { dialog = LogoutDialog(trackManager.aniList) },
-                    ),
-                    Preference.PreferenceItem.TrackingPreference(
-                        title = stringResource(trackManager.kitsu.nameRes()),
-                        service = trackManager.kitsu,
-                        login = { dialog = LoginDialog(trackManager.kitsu, R.string.email) },
-                        logout = { dialog = LogoutDialog(trackManager.kitsu) },
-                    ),
-                    Preference.PreferenceItem.TrackingPreference(
-                        title = stringResource(trackManager.mangaUpdates.nameRes()),
-                        service = trackManager.mangaUpdates,
-                        login = { dialog = LoginDialog(trackManager.mangaUpdates, R.string.username) },
-                        logout = { dialog = LogoutDialog(trackManager.mangaUpdates) },
-                    ),
-                    Preference.PreferenceItem.TrackingPreference(
-                        title = stringResource(trackManager.shikimori.nameRes()),
-                        service = trackManager.shikimori,
-                        login = { context.openInBrowser(ShikimoriApi.authUrl(), forceDefaultBrowser = true) },
-                        logout = { dialog = LogoutDialog(trackManager.shikimori) },
-                    ),
-                    Preference.PreferenceItem.TrackingPreference(
-                        title = stringResource(trackManager.simkl.nameRes()),
-                        service = trackManager.simkl,
-                        login = { context.openInBrowser(SimklApi.authUrl(), forceDefaultBrowser = true) },
-                        logout = { dialog = LogoutDialog(trackManager.simkl) },
-                    ),
-                    Preference.PreferenceItem.TrackingPreference(
-                        title = stringResource(trackManager.bangumi.nameRes()),
-                        service = trackManager.bangumi,
-                        login = { context.openInBrowser(BangumiApi.authUrl(), forceDefaultBrowser = true) },
-                        logout = { dialog = LogoutDialog(trackManager.bangumi) },
-                    ),
-                    Preference.PreferenceItem.InfoPreference(stringResource(R.string.tracking_info)),
-                ),
-            ),
-            Preference.PreferenceGroup(
-                title = stringResource(R.string.enhanced_services),
-                preferenceItems = listOf(
-                    Preference.PreferenceItem.TrackingPreference(
-                        title = stringResource(trackManager.komga.nameRes()),
-                        service = trackManager.komga,
+                title = stringResource(MR.strings.services),
+                preferenceItems = persistentListOf(
+                    Preference.PreferenceItem.TrackerPreference(
+                        title = trackerManager.myAnimeList.name,
+                        tracker = trackerManager.myAnimeList,
                         login = {
-                            val sourceManager = Injekt.get<SourceManager>()
-                            val acceptedSources = trackManager.komga.getAcceptedSources()
-                            val hasValidSourceInstalled = sourceManager.getCatalogueSources()
-                                .any { it::class.qualifiedName in acceptedSources }
-
-                            if (hasValidSourceInstalled) {
-                                trackManager.komga.loginNoop()
-                            } else {
-                                context.toast(R.string.tracker_komga_warning, Toast.LENGTH_LONG)
-                            }
+                            context.openInBrowser(
+                                MyAnimeListApi.authUrl(),
+                                forceDefaultBrowser = true,
+                            )
                         },
-                        logout = trackManager.komga::logout,
+                        logout = { dialog = LogoutDialog(trackerManager.myAnimeList) },
                     ),
-                    Preference.PreferenceItem.InfoPreference(stringResource(R.string.enhanced_tracking_info)),
+                    Preference.PreferenceItem.TrackerPreference(
+                        title = trackerManager.aniList.name,
+                        tracker = trackerManager.aniList,
+                        login = {
+                            context.openInBrowser(
+                                AnilistApi.authUrl(),
+                                forceDefaultBrowser = true,
+                            )
+                        },
+                        logout = { dialog = LogoutDialog(trackerManager.aniList) },
+                    ),
+                    Preference.PreferenceItem.TrackerPreference(
+                        title = trackerManager.kitsu.name,
+                        tracker = trackerManager.kitsu,
+                        login = { dialog = LoginDialog(trackerManager.kitsu, MR.strings.email) },
+                        logout = { dialog = LogoutDialog(trackerManager.kitsu) },
+                    ),
+                    Preference.PreferenceItem.TrackerPreference(
+                        title = trackerManager.mangaUpdates.name,
+                        tracker = trackerManager.mangaUpdates,
+                        login = { dialog = LoginDialog(trackerManager.mangaUpdates, MR.strings.username) },
+                        logout = { dialog = LogoutDialog(trackerManager.mangaUpdates) },
+                    ),
+                    Preference.PreferenceItem.TrackerPreference(
+                        title = trackerManager.shikimori.name,
+                        tracker = trackerManager.shikimori,
+                        login = {
+                            context.openInBrowser(
+                                ShikimoriApi.authUrl(),
+                                forceDefaultBrowser = true,
+                            )
+                        },
+                        logout = { dialog = LogoutDialog(trackerManager.shikimori) },
+                    ),
+                    Preference.PreferenceItem.TrackerPreference(
+                        title = trackerManager.simkl.name,
+                        tracker = trackerManager.simkl,
+                        login = {
+                            context.openInBrowser(
+                                SimklApi.authUrl(),
+                                forceDefaultBrowser = true,
+                            )
+                        },
+                        logout = { dialog = LogoutDialog(trackerManager.simkl) },
+                    ),
+                    Preference.PreferenceItem.TrackerPreference(
+                        title = trackerManager.bangumi.name,
+                        tracker = trackerManager.bangumi,
+                        login = {
+                            context.openInBrowser(
+                                BangumiApi.authUrl(),
+                                forceDefaultBrowser = true,
+                            )
+                        },
+                        logout = { dialog = LogoutDialog(trackerManager.bangumi) },
+                    ),
+                    Preference.PreferenceItem.InfoPreference(stringResource(MR.strings.tracking_info)),
                 ),
+            ),
+            Preference.PreferenceGroup(
+                title = stringResource(MR.strings.enhanced_services),
+                preferenceItems = (
+                    enhancedMangaTrackers.first
+                        .map { service ->
+                            Preference.PreferenceItem.TrackerPreference(
+                                title = service.name,
+                                tracker = service,
+                                login = { (service as EnhancedMangaTracker).loginNoop() },
+                                logout = service::logout,
+                            )
+                        } + listOf(Preference.PreferenceItem.InfoPreference(enhancedMangaTrackerInfo))
+                    ).toImmutableList(),
             ),
         )
     }
 
     @Composable
     private fun TrackingLoginDialog(
-        service: TrackService,
-        @StringRes uNameStringRes: Int,
+        tracker: Tracker,
+        uNameStringRes: StringResource,
         onDismissRequest: () -> Unit,
     ) {
         val context = LocalContext.current
         val scope = rememberCoroutineScope()
 
-        var username by remember { mutableStateOf(TextFieldValue(service.getUsername())) }
-        var password by remember { mutableStateOf(TextFieldValue(service.getPassword())) }
+        var username by remember { mutableStateOf(TextFieldValue(tracker.getUsername())) }
+        var password by remember { mutableStateOf(TextFieldValue(tracker.getPassword())) }
         var processing by remember { mutableStateOf(false) }
         var inputError by remember { mutableStateOf(false) }
 
@@ -205,13 +244,13 @@ class SettingsTrackingScreen : SearchableSettings {
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = stringResource(R.string.login_title, stringResource(service.nameRes())),
+                        text = stringResource(MR.strings.login_title, tracker.name),
                         modifier = Modifier.weight(1f),
                     )
                     IconButton(onClick = onDismissRequest) {
                         Icon(
                             imageVector = Icons.Outlined.Close,
-                            contentDescription = stringResource(R.string.action_close),
+                            contentDescription = stringResource(MR.strings.action_close),
                         )
                     }
                 }
@@ -225,7 +264,7 @@ class SettingsTrackingScreen : SearchableSettings {
                         label = { Text(text = stringResource(uNameStringRes)) },
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                         singleLine = true,
-                        isError = inputError && username.text.isEmpty(),
+                        isError = inputError && !processing,
                     )
 
                     var hidePassword by remember { mutableStateOf(true) }
@@ -233,7 +272,7 @@ class SettingsTrackingScreen : SearchableSettings {
                         modifier = Modifier.fillMaxWidth(),
                         value = password,
                         onValueChange = { password = it },
-                        label = { Text(text = stringResource(R.string.password)) },
+                        label = { Text(text = stringResource(MR.strings.password)) },
                         trailingIcon = {
                             IconButton(onClick = { hidePassword = !hidePassword }) {
                                 Icon(
@@ -256,34 +295,30 @@ class SettingsTrackingScreen : SearchableSettings {
                             imeAction = ImeAction.Done,
                         ),
                         singleLine = true,
-                        isError = inputError && password.text.isEmpty(),
+                        isError = inputError && !processing,
                     )
                 }
             },
             confirmButton = {
                 Button(
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = !processing,
+                    enabled = !processing && username.text.isNotBlank() && password.text.isNotBlank(),
                     onClick = {
-                        if (username.text.isEmpty() || password.text.isEmpty()) {
-                            inputError = true
-                            return@Button
-                        }
                         scope.launchIO {
-                            inputError = false
                             processing = true
                             val result = checkLogin(
                                 context = context,
-                                service = service,
+                                tracker = tracker,
                                 username = username.text,
                                 password = password.text,
                             )
+                            inputError = !result
                             if (result) onDismissRequest()
                             processing = false
                         }
                     },
                 ) {
-                    val id = if (processing) R.string.loading else R.string.login
+                    val id = if (processing) MR.strings.loading else MR.strings.login
                     Text(text = stringResource(id))
                 }
             },
@@ -292,16 +327,16 @@ class SettingsTrackingScreen : SearchableSettings {
 
     private suspend fun checkLogin(
         context: Context,
-        service: TrackService,
+        tracker: Tracker,
         username: String,
         password: String,
     ): Boolean {
         return try {
-            service.login(username, password)
-            withUIContext { context.toast(R.string.login_success) }
+            tracker.login(username, password)
+            withUIContext { context.stringResource(MR.strings.login_success) }
             true
         } catch (e: Throwable) {
-            service.logout()
+            tracker.logout()
             withUIContext { context.toast(e.message.toString()) }
             false
         }
@@ -309,7 +344,7 @@ class SettingsTrackingScreen : SearchableSettings {
 
     @Composable
     private fun TrackingLogoutDialog(
-        service: TrackService,
+        tracker: Tracker,
         onDismissRequest: () -> Unit,
     ) {
         val context = LocalContext.current
@@ -317,32 +352,32 @@ class SettingsTrackingScreen : SearchableSettings {
             onDismissRequest = onDismissRequest,
             title = {
                 Text(
-                    text = stringResource(R.string.logout_title, stringResource(service.nameRes())),
+                    text = stringResource(MR.strings.logout_title, tracker.name),
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )
             },
             confirmButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall)) {
                     OutlinedButton(
                         modifier = Modifier.weight(1f),
                         onClick = onDismissRequest,
                     ) {
-                        Text(text = stringResource(R.string.action_cancel))
+                        Text(text = stringResource(MR.strings.action_cancel))
                     }
                     Button(
                         modifier = Modifier.weight(1f),
                         onClick = {
-                            service.logout()
+                            tracker.logout()
                             onDismissRequest()
-                            context.toast(R.string.logout_success)
+                            context.stringResource(MR.strings.logout_success)
                         },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.error,
                             contentColor = MaterialTheme.colorScheme.onError,
                         ),
                     ) {
-                        Text(text = stringResource(R.string.logout))
+                        Text(text = stringResource(MR.strings.logout))
                     }
                 }
             },
@@ -351,10 +386,10 @@ class SettingsTrackingScreen : SearchableSettings {
 }
 
 private data class LoginDialog(
-    val service: TrackService,
-    @StringRes val uNameStringRes: Int,
+    val tracker: Tracker,
+    val uNameStringRes: StringResource,
 )
 
 private data class LogoutDialog(
-    val service: TrackService,
+    val tracker: Tracker,
 )

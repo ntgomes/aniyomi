@@ -6,79 +6,71 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.FlipToBack
 import androidx.compose.material.icons.outlined.SelectAll
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.components.AppBar
-import eu.kanade.presentation.components.OverflowMenu
-import eu.kanade.presentation.components.Pill
+import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.components.SearchToolbar
-import eu.kanade.presentation.library.LibraryState
-import eu.kanade.presentation.theme.active
-import eu.kanade.tachiyomi.R
+import kotlinx.collections.immutable.persistentListOf
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.components.Pill
+import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.theme.active
 
 @Composable
 fun LibraryToolbar(
-    state: LibraryState,
+    hasActiveFilters: Boolean,
+    selectedCount: Int,
     title: LibraryToolbarTitle,
-    incognitoMode: Boolean,
-    downloadedOnlyMode: Boolean,
     onClickUnselectAll: () -> Unit,
     onClickSelectAll: () -> Unit,
     onClickInvertSelection: () -> Unit,
     onClickFilter: () -> Unit,
     onClickRefresh: () -> Unit,
-    onClickOpenRandomManga: () -> Unit,
+    onClickGlobalUpdate: () -> Unit,
+    onClickOpenRandomEntry: () -> Unit,
+    searchQuery: String?,
+    onSearchQueryChange: (String?) -> Unit,
     scrollBehavior: TopAppBarScrollBehavior?,
-    navigateUp: (() -> Unit)? = null,
 ) = when {
-    state.selectionMode -> LibrarySelectionToolbar(
-        state = state,
-        incognitoMode = incognitoMode,
-        downloadedOnlyMode = downloadedOnlyMode,
+    selectedCount > 0 -> LibrarySelectionToolbar(
+        selectedCount = selectedCount,
         onClickUnselectAll = onClickUnselectAll,
         onClickSelectAll = onClickSelectAll,
         onClickInvertSelection = onClickInvertSelection,
-        navigateUp = navigateUp,
     )
     else -> LibraryRegularToolbar(
         title = title,
-        hasFilters = state.hasActiveFilters,
-        incognitoMode = incognitoMode,
-        downloadedOnlyMode = downloadedOnlyMode,
-        searchQuery = state.searchQuery,
-        onChangeSearchQuery = { state.searchQuery = it },
+        hasFilters = hasActiveFilters,
+        searchQuery = searchQuery,
+        onSearchQueryChange = onSearchQueryChange,
         onClickFilter = onClickFilter,
         onClickRefresh = onClickRefresh,
-        onClickOpenRandomManga = onClickOpenRandomManga,
+        onClickGlobalUpdate = onClickGlobalUpdate,
+        onClickOpenRandomEntry = onClickOpenRandomEntry,
         scrollBehavior = scrollBehavior,
-        navigateUp = navigateUp,
     )
 }
 
 @Composable
-fun LibraryRegularToolbar(
+private fun LibraryRegularToolbar(
     title: LibraryToolbarTitle,
     hasFilters: Boolean,
-    incognitoMode: Boolean,
-    downloadedOnlyMode: Boolean,
     searchQuery: String?,
-    onChangeSearchQuery: (String?) -> Unit,
+    onSearchQueryChange: (String?) -> Unit,
     onClickFilter: () -> Unit,
     onClickRefresh: () -> Unit,
-    onClickOpenRandomManga: () -> Unit,
+    onClickGlobalUpdate: () -> Unit,
+    onClickOpenRandomEntry: () -> Unit,
     scrollBehavior: TopAppBarScrollBehavior?,
-    navigateUp: (() -> Unit)? = null,
 ) {
     val pillAlpha = if (isSystemInDarkTheme()) 0.12f else 0.08f
     SearchToolbar(
@@ -90,9 +82,9 @@ fun LibraryRegularToolbar(
                     modifier = Modifier.weight(1f, false),
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (title.numberOfManga != null) {
+                if (title.numberOfEntries != null) {
                     Pill(
-                        text = "${title.numberOfManga}",
+                        text = "${title.numberOfEntries}",
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = pillAlpha),
                         fontSize = 14.sp,
                     )
@@ -100,66 +92,68 @@ fun LibraryRegularToolbar(
             }
         },
         searchQuery = searchQuery,
-        onChangeSearchQuery = onChangeSearchQuery,
+        onChangeSearchQuery = onSearchQueryChange,
         actions = {
             val filterTint = if (hasFilters) MaterialTheme.colorScheme.active else LocalContentColor.current
-            IconButton(onClick = onClickFilter) {
-                Icon(Icons.Outlined.FilterList, contentDescription = stringResource(R.string.action_filter), tint = filterTint)
-            }
-
-            OverflowMenu { closeMenu ->
-                DropdownMenuItem(
-                    text = { Text(text = stringResource(R.string.pref_category_library_update)) },
-                    onClick = {
-                        onClickRefresh()
-                        closeMenu()
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text(text = stringResource(R.string.action_open_random_manga)) },
-                    onClick = {
-                        onClickOpenRandomManga()
-                        closeMenu()
-                    },
-                )
-            }
+            AppBarActions(
+                persistentListOf(
+                    AppBar.Action(
+                        title = stringResource(MR.strings.action_filter),
+                        icon = Icons.Outlined.FilterList,
+                        iconTint = filterTint,
+                        onClick = onClickFilter,
+                    ),
+                    AppBar.OverflowAction(
+                        title = stringResource(MR.strings.action_update_library),
+                        onClick = onClickGlobalUpdate,
+                    ),
+                    AppBar.OverflowAction(
+                        title = stringResource(MR.strings.action_update_category),
+                        onClick = onClickRefresh,
+                    ),
+                    AppBar.OverflowAction(
+                        title = stringResource(MR.strings.action_open_random_manga),
+                        onClick = onClickOpenRandomEntry,
+                    ),
+                ),
+            )
         },
-        incognitoMode = incognitoMode,
-        downloadedOnlyMode = downloadedOnlyMode,
         scrollBehavior = scrollBehavior,
-        navigateUp = navigateUp,
     )
 }
 
 @Composable
-fun LibrarySelectionToolbar(
-    state: LibraryState,
-    incognitoMode: Boolean,
-    downloadedOnlyMode: Boolean,
+private fun LibrarySelectionToolbar(
+    selectedCount: Int,
     onClickUnselectAll: () -> Unit,
     onClickSelectAll: () -> Unit,
     onClickInvertSelection: () -> Unit,
-    navigateUp: (() -> Unit)? = null,
 ) {
     AppBar(
-        titleContent = { Text(text = "${state.selection.size}") },
+        titleContent = { Text(text = "$selectedCount") },
         actions = {
-            IconButton(onClick = onClickSelectAll) {
-                Icon(Icons.Outlined.SelectAll, contentDescription = stringResource(R.string.action_select_all))
-            }
-            IconButton(onClick = onClickInvertSelection) {
-                Icon(Icons.Outlined.FlipToBack, contentDescription = stringResource(R.string.action_select_inverse))
-            }
+            AppBarActions(
+                persistentListOf(
+                    AppBar.Action(
+                        title = stringResource(MR.strings.action_select_all),
+                        icon = Icons.Outlined.SelectAll,
+                        onClick = onClickSelectAll,
+                    ),
+                    AppBar.Action(
+                        title = stringResource(MR.strings.action_select_inverse),
+                        icon = Icons.Outlined.FlipToBack,
+                        onClick = onClickInvertSelection,
+                    ),
+                ),
+            )
         },
         isActionMode = true,
         onCancelActionMode = onClickUnselectAll,
-        incognitoMode = incognitoMode,
-        downloadedOnlyMode = downloadedOnlyMode,
-        navigateUp = navigateUp,
     )
 }
 
+@Immutable
 data class LibraryToolbarTitle(
     val text: String,
-    val numberOfManga: Int? = null,
+    val numberOfEntries: Int? = null,
 )

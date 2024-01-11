@@ -32,10 +32,10 @@ class WebtoonConfig(
     var sidePadding = 0
         private set
 
-    var longStripSplit = false
+    var doubleTapZoom = true
         private set
 
-    var longStripSplitChangedListener: ((Boolean) -> Unit)? = null
+    var doubleTapZoomChangedListener: ((Boolean) -> Unit)? = null
 
     val theme = readerPreferences.readerTheme().get()
 
@@ -62,13 +62,22 @@ class WebtoonConfig(
         readerPreferences.dualPageInvertWebtoon()
             .register({ dualPageInvert = it }, { imagePropertyChangedListener?.invoke() })
 
-        readerPreferences.longStripSplitWebtoon()
+        readerPreferences.dualPageRotateToFitWebtoon()
             .register(
-                { longStripSplit = it },
-                {
-                    imagePropertyChangedListener?.invoke()
-                    longStripSplitChangedListener?.invoke(it)
-                },
+                { dualPageRotateToFit = it },
+                { imagePropertyChangedListener?.invoke() },
+            )
+
+        readerPreferences.dualPageRotateToFitInvertWebtoon()
+            .register(
+                { dualPageRotateToFitInvert = it },
+                { imagePropertyChangedListener?.invoke() },
+            )
+
+        readerPreferences.webtoonDoubleTapZoomEnabled()
+            .register(
+                { doubleTapZoom = it },
+                { doubleTapZoomChangedListener?.invoke(it) },
             )
 
         readerPreferences.readerTheme().changes()

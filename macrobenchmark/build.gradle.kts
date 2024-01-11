@@ -5,22 +5,10 @@ plugins {
 
 android {
     namespace = "tachiyomi.macrobenchmark"
-    compileSdk = AndroidConfig.compileSdk
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
-    }
-
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_1_8.toString()
-    }
 
     defaultConfig {
-        minSdk = AndroidConfig.minSdk
-        targetSdk = AndroidConfig.targetSdk
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunnerArguments["androidx.benchmark.enabledRules"] = "BaselineProfile"
     }
 
     buildTypes {
@@ -30,7 +18,7 @@ android {
         create("benchmark") {
             isDebuggable = true
             signingConfig = getByName("debug").signingConfig
-            matchingFallbacks += listOf("release")
+            matchingFallbacks.add("release")
         }
     }
 

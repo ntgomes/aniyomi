@@ -1,17 +1,21 @@
 package eu.kanade.tachiyomi.data.track.anilist
 
 import eu.kanade.domain.track.service.TrackPreferences
-import eu.kanade.tachiyomi.data.database.models.AnimeTrack
-import eu.kanade.tachiyomi.data.database.models.Track
-import eu.kanade.tachiyomi.data.track.TrackManager
+import eu.kanade.tachiyomi.data.database.models.anime.AnimeTrack
+import eu.kanade.tachiyomi.data.database.models.manga.MangaTrack
+import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.data.track.model.AnimeTrackSearch
-import eu.kanade.tachiyomi.data.track.model.TrackSearch
+import eu.kanade.tachiyomi.data.track.model.MangaTrackSearch
+import eu.kanade.tachiyomi.util.lang.htmlDecode
+import kotlinx.serialization.Serializable
 import uy.kohesive.injekt.injectLazy
 import java.text.SimpleDateFormat
 import java.util.Locale
+import tachiyomi.domain.track.anime.model.AnimeTrack as DomainAnimeTrack
+import tachiyomi.domain.track.manga.model.MangaTrack as DomainMangaTrack
 
 data class ALManga(
-    val media_id: Long,
+    val remote_id: Long,
     val title_user_pref: String,
     val image_url_lge: String,
     val description: String?,
@@ -19,15 +23,17 @@ data class ALManga(
     val publishing_status: String,
     val start_date_fuzzy: Long,
     val total_chapters: Int,
+    val average_score: Int,
 ) {
 
-    fun toTrack() = TrackSearch.create(TrackManager.ANILIST).apply {
-        media_id = this@ALManga.media_id
+    fun toTrack() = MangaTrackSearch.create(TrackerManager.ANILIST).apply {
+        remote_id = this@ALManga.remote_id
         title = title_user_pref
         total_chapters = this@ALManga.total_chapters
         cover_url = image_url_lge
-        summary = description ?: ""
-        tracking_url = AnilistApi.mangaUrl(media_id)
+        summary = description?.htmlDecode() ?: ""
+        score = average_score.toFloat()
+        tracking_url = AnilistApi.mangaUrl(remote_id)
         publishing_status = this@ALManga.publishing_status
         publishing_type = format
         if (start_date_fuzzy != 0L) {
@@ -42,7 +48,7 @@ data class ALManga(
 }
 
 data class ALAnime(
-    val media_id: Long,
+    val remote_id: Long,
     val title_user_pref: String,
     val image_url_lge: String,
     val description: String?,
@@ -50,15 +56,17 @@ data class ALAnime(
     val publishing_status: String,
     val start_date_fuzzy: Long,
     val total_episodes: Int,
+    val average_score: Int,
 ) {
 
-    fun toTrack() = AnimeTrackSearch.create(TrackManager.ANILIST).apply {
-        media_id = this@ALAnime.media_id
+    fun toTrack() = AnimeTrackSearch.create(TrackerManager.ANILIST).apply {
+        remote_id = this@ALAnime.remote_id
         title = title_user_pref
         total_episodes = this@ALAnime.total_episodes
         cover_url = image_url_lge
-        summary = description ?: ""
-        tracking_url = AnilistApi.animeUrl(media_id)
+        summary = description?.htmlDecode() ?: ""
+        score = average_score.toFloat()
+        tracking_url = AnilistApi.animeUrl(remote_id)
         publishing_status = this@ALAnime.publishing_status
         publishing_type = format
         if (start_date_fuzzy != 0L) {
@@ -82,8 +90,8 @@ data class ALUserManga(
     val manga: ALManga,
 ) {
 
-    fun toTrack() = Track.create(TrackManager.ANILIST).apply {
-        media_id = manga.media_id
+    fun toTrack() = MangaTrack.create(TrackerManager.ANILIST).apply {
+        remote_id = manga.remote_id
         title = manga.title_user_pref
         status = toTrackStatus()
         score = score_raw.toFloat()
@@ -94,7 +102,7 @@ data class ALUserManga(
         total_chapters = manga.total_chapters
     }
 
-    fun toTrackStatus() = when (list_status) {
+    private fun toTrackStatus() = when (list_status) {
         "CURRENT" -> Anilist.READING
         "COMPLETED" -> Anilist.COMPLETED
         "PAUSED" -> Anilist.PAUSED
@@ -115,8 +123,8 @@ data class ALUserAnime(
     val anime: ALAnime,
 ) {
 
-    fun toTrack() = AnimeTrack.create(TrackManager.ANILIST).apply {
-        media_id = anime.media_id
+    fun toTrack() = AnimeTrack.create(TrackerManager.ANILIST).apply {
+        remote_id = anime.remote_id
         title = anime.title_user_pref
         status = toTrackStatus()
         score = score_raw.toFloat()
@@ -127,7 +135,7 @@ data class ALUserAnime(
         total_episodes = anime.total_episodes
     }
 
-    fun toTrackStatus() = when (list_status) {
+    private fun toTrackStatus() = when (list_status) {
         "CURRENT" -> Anilist.WATCHING
         "COMPLETED" -> Anilist.COMPLETED
         "PAUSED" -> Anilist.PAUSED
@@ -138,7 +146,17 @@ data class ALUserAnime(
     }
 }
 
-fun Track.toAnilistStatus() = when (status) {
+@Serializable
+data class OAuth(
+    val access_token: String,
+    val token_type: String,
+    val expires: Long,
+    val expires_in: Long,
+)
+
+fun OAuth.isExpired() = System.currentTimeMillis() > expires
+
+fun MangaTrack.toAnilistStatus() = when (status) {
     Anilist.READING -> "CURRENT"
     Anilist.COMPLETED -> "COMPLETED"
     Anilist.PAUSED -> "PAUSED"
@@ -160,54 +178,54 @@ fun AnimeTrack.toAnilistStatus() = when (status) {
 
 private val preferences: TrackPreferences by injectLazy()
 
-fun Track.toAnilistScore(): String = when (preferences.anilistScoreType().get()) {
-// 10 point
+fun DomainMangaTrack.toAnilistScore(): String = when (preferences.anilistScoreType().get()) {
+    // 10 point
     "POINT_10" -> (score.toInt() / 10).toString()
-// 100 point
+    // 100 point
     "POINT_100" -> score.toInt().toString()
-// 5 stars
+    // 5 stars
     "POINT_5" -> when {
-        score == 0f -> "0"
+        score == 0.0 -> "0"
         score < 30 -> "1"
         score < 50 -> "2"
         score < 70 -> "3"
         score < 90 -> "4"
         else -> "5"
     }
-// Smiley
+    // Smiley
     "POINT_3" -> when {
-        score == 0f -> "0"
+        score == 0.0 -> "0"
         score <= 35 -> ":("
         score <= 60 -> ":|"
         else -> ":)"
     }
-// 10 point decimal
+    // 10 point decimal
     "POINT_10_DECIMAL" -> (score / 10).toString()
     else -> throw NotImplementedError("Unknown score type")
 }
 
-fun AnimeTrack.toAnilistScore(): String = when (preferences.anilistScoreType().get()) {
-// 10 point
+fun DomainAnimeTrack.toAnilistScore(): String = when (preferences.anilistScoreType().get()) {
+    // 10 point
     "POINT_10" -> (score.toInt() / 10).toString()
-// 100 point
+    // 100 point
     "POINT_100" -> score.toInt().toString()
-// 5 stars
+    // 5 stars
     "POINT_5" -> when {
-        score == 0f -> "0"
+        score == 0.0 -> "0"
         score < 30 -> "1"
         score < 50 -> "2"
         score < 70 -> "3"
         score < 90 -> "4"
         else -> "5"
     }
-// Smiley
+    // Smiley
     "POINT_3" -> when {
-        score == 0f -> "0"
+        score == 0.0 -> "0"
         score <= 35 -> ":("
         score <= 60 -> ":|"
         else -> ":)"
     }
-// 10 point decimal
+    // 10 point decimal
     "POINT_10_DECIMAL" -> (score / 10).toString()
     else -> throw NotImplementedError("Unknown score type")
 }

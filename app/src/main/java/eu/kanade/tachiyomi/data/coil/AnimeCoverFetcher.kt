@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.data.coil
 
+import android.net.Uri
 import coil.ImageLoader
 import coil.decode.DataSource
 import coil.decode.ImageSource
@@ -10,14 +11,11 @@ import coil.fetch.SourceResult
 import coil.network.HttpException
 import coil.request.Options
 import coil.request.Parameters
-import eu.kanade.domain.manga.model.MangaCover
-import eu.kanade.tachiyomi.animesource.AnimeSourceManager
+import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.data.cache.AnimeCoverCache
 import eu.kanade.tachiyomi.data.coil.AnimeCoverFetcher.Companion.USE_CUSTOM_COVER
-import eu.kanade.tachiyomi.data.database.models.Anime
 import eu.kanade.tachiyomi.network.await
-import eu.kanade.tachiyomi.util.system.logcat
 import logcat.LogPriority
 import okhttp3.CacheControl
 import okhttp3.Call
@@ -28,14 +26,18 @@ import okio.Path.Companion.toOkioPath
 import okio.Source
 import okio.buffer
 import okio.sink
+import okio.source
+import tachiyomi.core.util.system.logcat
+import tachiyomi.domain.entries.anime.model.Anime
+import tachiyomi.domain.entries.anime.model.AnimeCover
+import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import uy.kohesive.injekt.injectLazy
 import java.io.File
-import eu.kanade.domain.anime.model.Anime as DomainAnime
 
 /**
  * A [Fetcher] that fetches cover image for [Anime] object.
  *
- * It uses [Anime.thumbnail_url] if custom cover is not set by the user.
+ * It uses [Anime.thumbnailUrl] if custom cover is not set by the user.
  * Disk caching for library items is handled by [AnimeCoverCache], otherwise
  * handled by Coil's [DiskCache].
  *
@@ -72,8 +74,19 @@ class AnimeCoverFetcher(
         return when (getResourceType(url)) {
             Type.URL -> httpLoader()
             Type.File -> fileLoader(File(url.substringAfter("file://")))
+            Type.URI -> uniFileLoader(url)
             null -> error("Invalid image")
         }
+    }
+
+    private fun uniFileLoader(urlString: String): FetchResult {
+        val uniFile = UniFile.fromUri(options.context, Uri.parse(urlString))!!
+        val tempFile = uniFile.openInputStream().source().buffer()
+        return SourceResult(
+            source = ImageSource(source = tempFile, context = options.context),
+            mimeType = "image/*",
+            dataSource = DataSource.DISK,
+        )
     }
 
     private fun fileLoader(file: File): FetchResult {
@@ -253,15 +266,16 @@ class AnimeCoverFetcher(
             cover.isNullOrEmpty() -> null
             cover.startsWith("http", true) || cover.startsWith("Custom-", true) -> Type.URL
             cover.startsWith("/") || cover.startsWith("file://") -> Type.File
+            cover.startsWith("content") -> Type.URI
             else -> null
         }
     }
 
     private enum class Type {
-        File, URL
+        File, URL, URI
     }
 
-    class Factory(
+    class AnimeFactory(
         private val callFactoryLazy: Lazy<Call.Factory>,
         private val diskCacheLazy: Lazy<DiskCache>,
     ) : Fetcher.Factory<Anime> {
@@ -271,35 +285,12 @@ class AnimeCoverFetcher(
 
         override fun create(data: Anime, options: Options, imageLoader: ImageLoader): Fetcher {
             return AnimeCoverFetcher(
-                url = data.thumbnail_url,
-                isLibraryAnime = data.favorite,
-                options = options,
-                coverFileLazy = lazy { coverCache.getCoverFile(data.thumbnail_url) },
-                customCoverFileLazy = lazy { coverCache.getCustomCoverFile(data.id) },
-                diskCacheKeyLazy = lazy { AnimeKeyer().key(data, options) },
-                sourceLazy = lazy { sourceManager.get(data.source) as? AnimeHttpSource },
-                callFactoryLazy = callFactoryLazy,
-                diskCacheLazy = diskCacheLazy,
-            )
-        }
-    }
-
-    class DomainAnimeFactory(
-        private val callFactoryLazy: Lazy<Call.Factory>,
-        private val diskCacheLazy: Lazy<DiskCache>,
-    ) : Fetcher.Factory<DomainAnime> {
-
-        private val coverCache: AnimeCoverCache by injectLazy()
-        private val sourceManager: AnimeSourceManager by injectLazy()
-
-        override fun create(data: DomainAnime, options: Options, imageLoader: ImageLoader): Fetcher {
-            return AnimeCoverFetcher(
                 url = data.thumbnailUrl,
                 isLibraryAnime = data.favorite,
                 options = options,
                 coverFileLazy = lazy { coverCache.getCoverFile(data.thumbnailUrl) },
                 customCoverFileLazy = lazy { coverCache.getCustomCoverFile(data.id) },
-                diskCacheKeyLazy = lazy { DomainAnimeKeyer().key(data, options) },
+                diskCacheKeyLazy = lazy { AnimeKeyer().key(data, options) },
                 sourceLazy = lazy { sourceManager.get(data.source) as? AnimeHttpSource },
                 callFactoryLazy = callFactoryLazy,
                 diskCacheLazy = diskCacheLazy,
@@ -310,18 +301,18 @@ class AnimeCoverFetcher(
     class AnimeCoverFactory(
         private val callFactoryLazy: Lazy<Call.Factory>,
         private val diskCacheLazy: Lazy<DiskCache>,
-    ) : Fetcher.Factory<MangaCover> {
+    ) : Fetcher.Factory<AnimeCover> {
 
         private val coverCache: AnimeCoverCache by injectLazy()
         private val sourceManager: AnimeSourceManager by injectLazy()
 
-        override fun create(data: MangaCover, options: Options, imageLoader: ImageLoader): Fetcher {
+        override fun create(data: AnimeCover, options: Options, imageLoader: ImageLoader): Fetcher {
             return AnimeCoverFetcher(
                 url = data.url,
-                isLibraryAnime = data.isMangaFavorite,
+                isLibraryAnime = data.isAnimeFavorite,
                 options = options,
                 coverFileLazy = lazy { coverCache.getCoverFile(data.url) },
-                customCoverFileLazy = lazy { coverCache.getCustomCoverFile(data.mangaId) },
+                customCoverFileLazy = lazy { coverCache.getCustomCoverFile(data.animeId) },
                 diskCacheKeyLazy = lazy { AnimeCoverKeyer().key(data, options) },
                 sourceLazy = lazy { sourceManager.get(data.sourceId) as? AnimeHttpSource },
                 callFactoryLazy = callFactoryLazy,

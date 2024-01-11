@@ -12,8 +12,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.tooling.preview.Preview
-import eu.kanade.presentation.util.secondaryItemAlpha
+import androidx.compose.ui.tooling.preview.PreviewLightDark
+import eu.kanade.presentation.theme.TachiyomiTheme
+import tachiyomi.presentation.core.util.secondaryItemAlpha
 
 @Composable
 fun TextPreferenceWidget(
@@ -58,10 +59,10 @@ fun TextPreferenceWidget(
     )
 }
 
-@Preview
+@PreviewLightDark
 @Composable
 private fun TextPreferenceWidgetPreview() {
-    MaterialTheme {
+    TachiyomiTheme {
         Surface {
             Column {
                 TextPreferenceWidget(

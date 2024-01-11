@@ -1,232 +1,218 @@
 package eu.kanade.presentation.more
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
+import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.CollectionsBookmark
 import androidx.compose.material.icons.outlined.GetApp
-import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Label
+import androidx.compose.material.icons.outlined.QueryStats
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.SettingsBackupRestore
+import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
-import eu.kanade.domain.library.service.LibraryPreferences
-import eu.kanade.presentation.components.AppStateBanners
-import eu.kanade.presentation.components.Divider
-import eu.kanade.presentation.components.ScrollbarLazyColumn
 import eu.kanade.presentation.components.WarningBanner
 import eu.kanade.presentation.more.settings.widget.SwitchPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
 import eu.kanade.tachiyomi.R
-import eu.kanade.tachiyomi.ui.more.AnimeDownloadQueueState
+import eu.kanade.tachiyomi.core.Constants
 import eu.kanade.tachiyomi.ui.more.DownloadQueueState
-import eu.kanade.tachiyomi.ui.more.MoreController
-import eu.kanade.tachiyomi.ui.more.MorePresenter
-import eu.kanade.tachiyomi.widget.TachiyomiBottomNavigationView
-import uy.kohesive.injekt.Injekt
-import uy.kohesive.injekt.api.get
+import tachiyomi.domain.library.service.LibraryPreferences
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.components.ScrollbarLazyColumn
+import tachiyomi.presentation.core.components.material.Scaffold
+import tachiyomi.presentation.core.i18n.pluralStringResource
+import tachiyomi.presentation.core.i18n.stringResource
+import uy.kohesive.injekt.injectLazy
 
 @Composable
 fun MoreScreen(
-    presenter: MorePresenter,
-    onClickHistory: () -> Unit,
-    onClickAnimeDownloadQueue: () -> Unit,
+    downloadQueueStateProvider: () -> DownloadQueueState,
+    downloadedOnly: Boolean,
+    onDownloadedOnlyChange: (Boolean) -> Unit,
+    incognitoMode: Boolean,
+    onIncognitoModeChange: (Boolean) -> Unit,
     isFDroid: Boolean,
+    onClickAlt: () -> Unit,
     onClickDownloadQueue: () -> Unit,
-    onClickAnimeCategories: () -> Unit,
     onClickCategories: () -> Unit,
-    onClickBackupAndRestore: () -> Unit,
+    onClickStats: () -> Unit,
+    onClickStorage: () -> Unit,
+    onClickDataAndStorage: () -> Unit,
     onClickSettings: () -> Unit,
     onClickAbout: () -> Unit,
 ) {
     val uriHandler = LocalUriHandler.current
-    val downloadQueueState by presenter.downloadQueueState.collectAsState()
 
-    val animeDownloadQueueState by presenter.animeDownloadQueueState.collectAsState()
-
-    val libraryPreferences: LibraryPreferences = Injekt.get()
-
-    ScrollbarLazyColumn(
-        modifier = Modifier.statusBarsPadding(),
-        contentPadding = TachiyomiBottomNavigationView.withBottomNavPadding(
-            WindowInsets.navigationBars.asPaddingValues(),
-        ),
-    ) {
-        if (isFDroid) {
+    Scaffold(
+        topBar = {
+            Column(
+                modifier = Modifier.windowInsetsPadding(
+                    WindowInsets.systemBars.only(
+                        WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
+                    ),
+                ),
+            ) {
+                if (isFDroid) {
+                    WarningBanner(
+                        textRes = MR.strings.fdroid_warning,
+                        modifier = Modifier.clickable {
+                            uriHandler.openUri(
+                                "https://aniyomi.org/docs/faq/general#how-do-i-update-from-the-f-droid-builds",
+                            )
+                        },
+                    )
+                }
+            }
+        },
+    ) { contentPadding ->
+        ScrollbarLazyColumn(
+            modifier = Modifier.padding(contentPadding),
+        ) {
             item {
-                WarningBanner(
-                    textRes = R.string.fdroid_warning,
-                    modifier = Modifier.clickable {
-                        uriHandler.openUri("https://tachiyomi.org/help/faq/#how-do-i-migrate-from-the-f-droid-version")
-                    },
+                LogoHeader()
+            }
+            item {
+                SwitchPreferenceWidget(
+                    title = stringResource(MR.strings.label_downloaded_only),
+                    subtitle = stringResource(MR.strings.downloaded_only_summary),
+                    icon = Icons.Outlined.CloudOff,
+                    checked = downloadedOnly,
+                    onCheckedChanged = onDownloadedOnlyChange,
                 )
             }
-        }
-
-        item {
-            LogoHeader()
-        }
-
-        item {
-            AppStateBanners(
-                downloadedOnlyMode = presenter.downloadedOnly.value,
-                incognitoMode = presenter.incognitoMode.value,
-            )
-        }
-
-        item {
-            SwitchPreferenceWidget(
-                title = stringResource(R.string.label_downloaded_only),
-                subtitle = stringResource(R.string.downloaded_only_summary),
-                icon = Icons.Outlined.CloudOff,
-                checked = presenter.downloadedOnly.value,
-                onCheckedChanged = { presenter.downloadedOnly.value = it },
-            )
-        }
-        item {
-            SwitchPreferenceWidget(
-                title = stringResource(R.string.pref_incognito_mode),
-                subtitle = stringResource(R.string.pref_incognito_mode_summary),
-                icon = ImageVector.vectorResource(R.drawable.ic_glasses_24dp),
-                checked = presenter.incognitoMode.value,
-                onCheckedChanged = { presenter.incognitoMode.value = it },
-            )
-        }
-
-        item { Divider() }
-
-        item {
-            val bottomNavStyle = libraryPreferences.bottomNavStyle().get()
-            val titleRes = when (bottomNavStyle) {
-                1 -> R.string.label_recent_updates
-                2 -> R.string.label_manga
-                else -> R.string.label_recent_manga
+            item {
+                SwitchPreferenceWidget(
+                    title = stringResource(MR.strings.pref_incognito_mode),
+                    subtitle = stringResource(MR.strings.pref_incognito_mode_summary),
+                    icon = ImageVector.vectorResource(R.drawable.ic_glasses_24dp),
+                    checked = incognitoMode,
+                    onCheckedChanged = onIncognitoModeChange,
+                )
             }
-            val icon = when (bottomNavStyle) {
-                1 -> ImageVector.vectorResource(id = R.drawable.ic_updates_outline_24dp)
-                2 -> Icons.Outlined.CollectionsBookmark
-                else -> Icons.Outlined.History
+
+            item { HorizontalDivider() }
+
+            val libraryPreferences: LibraryPreferences by injectLazy()
+
+            item {
+                val bottomNavStyle = libraryPreferences.bottomNavStyle().get()
+                val titleRes = when (bottomNavStyle) {
+                    0 -> MR.strings.label_recent_manga
+                    1 -> MR.strings.label_recent_updates
+                    else -> MR.strings.label_manga
+                }
+                val icon = when (bottomNavStyle) {
+                    0 -> Icons.Outlined.History
+                    1 -> ImageVector.vectorResource(id = R.drawable.ic_updates_outline_24dp)
+                    else -> Icons.Outlined.CollectionsBookmark
+                }
+                TextPreferenceWidget(
+                    title = stringResource(titleRes),
+                    icon = icon,
+                    onPreferenceClick = onClickAlt,
+                )
             }
-            TextPreferenceWidget(
-                title = stringResource(titleRes),
-                icon = icon,
-                onPreferenceClick = onClickHistory,
-            )
-        }
-        item {
-            TextPreferenceWidget(
-                title = stringResource(R.string.label_anime_download_queue),
-                subtitle = when (animeDownloadQueueState) {
-                    AnimeDownloadQueueState.Stopped -> null
-                    is AnimeDownloadQueueState.Paused -> {
-                        val pending = (animeDownloadQueueState as AnimeDownloadQueueState.Paused).pending
-                        if (pending == 0) {
-                            stringResource(R.string.paused)
-                        } else {
-                            "${stringResource(R.string.paused)} • ${
+
+            item {
+                val downloadQueueState = downloadQueueStateProvider()
+                TextPreferenceWidget(
+                    title = stringResource(MR.strings.label_download_queue),
+                    subtitle = when (downloadQueueState) {
+                        DownloadQueueState.Stopped -> null
+                        is DownloadQueueState.Paused -> {
+                            val pending = downloadQueueState.pending
+                            if (pending == 0) {
+                                stringResource(MR.strings.paused)
+                            } else {
+                                "${stringResource(MR.strings.paused)} • ${
+                                    pluralStringResource(
+                                        MR.plurals.download_queue_summary,
+                                        count = pending,
+                                        pending,
+                                    )
+                                }"
+                            }
+                        }
+                        is DownloadQueueState.Downloading -> {
+                            val pending = downloadQueueState.pending
                             pluralStringResource(
-                                id = R.plurals.download_queue_summary,
+                                MR.plurals.download_queue_summary,
                                 count = pending,
                                 pending,
                             )
-                            }"
                         }
-                    }
-                    is AnimeDownloadQueueState.Downloading -> {
-                        val pending = (animeDownloadQueueState as AnimeDownloadQueueState.Downloading).pending
-                        pluralStringResource(id = R.plurals.download_queue_summary, count = pending, pending)
-                    }
-                },
-                icon = Icons.Outlined.GetApp,
-                onPreferenceClick = onClickAnimeDownloadQueue,
-            )
-        }
-        item {
-            TextPreferenceWidget(
-                title = stringResource(R.string.label_download_queue),
-                subtitle = when (downloadQueueState) {
-                    DownloadQueueState.Stopped -> null
-                    is DownloadQueueState.Paused -> {
-                        val pending = (downloadQueueState as DownloadQueueState.Paused).pending
-                        if (pending == 0) {
-                            stringResource(R.string.paused)
-                        } else {
-                            "${stringResource(R.string.paused)} • ${
-                            pluralStringResource(
-                                id = R.plurals.download_queue_summary,
-                                count = pending,
-                                pending,
-                            )
-                            }"
-                        }
-                    }
-                    is DownloadQueueState.Downloading -> {
-                        val pending = (downloadQueueState as DownloadQueueState.Downloading).pending
-                        pluralStringResource(id = R.plurals.download_queue_summary, count = pending, pending)
-                    }
-                },
-                icon = Icons.Outlined.GetApp,
-                onPreferenceClick = onClickDownloadQueue,
-            )
-        }
-        item {
-            TextPreferenceWidget(
-                title = stringResource(R.string.anime_categories),
-                icon = Icons.Outlined.Label,
-                onPreferenceClick = onClickAnimeCategories,
-            )
-        }
-        item {
-            TextPreferenceWidget(
-                title = stringResource(R.string.categories),
-                icon = Icons.Outlined.Label,
-                onPreferenceClick = onClickCategories,
-            )
-        }
-        item {
-            TextPreferenceWidget(
-                title = stringResource(R.string.label_backup),
-                icon = Icons.Outlined.SettingsBackupRestore,
-                onPreferenceClick = onClickBackupAndRestore,
-            )
-        }
+                    },
+                    icon = Icons.Outlined.GetApp,
+                    onPreferenceClick = onClickDownloadQueue,
+                )
+            }
+            item {
+                TextPreferenceWidget(
+                    title = stringResource(MR.strings.general_categories),
+                    icon = Icons.AutoMirrored.Outlined.Label,
+                    onPreferenceClick = onClickCategories,
+                )
+            }
+            item {
+                TextPreferenceWidget(
+                    title = stringResource(MR.strings.label_stats),
+                    icon = Icons.Outlined.QueryStats,
+                    onPreferenceClick = onClickStats,
+                )
+            }
+            item {
+                TextPreferenceWidget(
+                    title = stringResource(MR.strings.label_storage),
+                    icon = Icons.Outlined.Storage,
+                    onPreferenceClick = onClickStorage,
+                )
+            }
+            item {
+                TextPreferenceWidget(
+                    title = stringResource(MR.strings.label_data_storage),
+                    icon = Icons.Outlined.Storage,
+                    onPreferenceClick = onClickDataAndStorage,
+                )
+            }
 
-        item { Divider() }
+            item { HorizontalDivider() }
 
-        item {
-            TextPreferenceWidget(
-                title = stringResource(R.string.label_settings),
-                icon = Icons.Outlined.Settings,
-                onPreferenceClick = onClickSettings,
-            )
-        }
-        item {
-            TextPreferenceWidget(
-                title = stringResource(R.string.pref_category_about),
-                icon = Icons.Outlined.Info,
-                onPreferenceClick = onClickAbout,
-            )
-        }
-        item {
-            TextPreferenceWidget(
-                title = stringResource(R.string.label_help),
-                icon = Icons.Outlined.HelpOutline,
-                onPreferenceClick = { uriHandler.openUri(MoreController.URL_HELP) },
-            )
+            item {
+                TextPreferenceWidget(
+                    title = stringResource(MR.strings.label_settings),
+                    icon = Icons.Outlined.Settings,
+                    onPreferenceClick = onClickSettings,
+                )
+            }
+            item {
+                TextPreferenceWidget(
+                    title = stringResource(MR.strings.pref_category_about),
+                    icon = Icons.Outlined.Info,
+                    onPreferenceClick = onClickAbout,
+                )
+            }
+            item {
+                TextPreferenceWidget(
+                    title = stringResource(MR.strings.label_help),
+                    icon = Icons.AutoMirrored.Outlined.HelpOutline,
+                    onPreferenceClick = { uriHandler.openUri(Constants.URL_HELP) },
+                )
+            }
         }
     }
 }

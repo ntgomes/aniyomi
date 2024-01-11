@@ -1,70 +1,86 @@
 package eu.kanade.presentation.components
 
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.TextFieldDefaults
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import eu.kanade.presentation.util.secondaryItemAlpha
-import eu.kanade.tachiyomi.R
+import kotlinx.collections.immutable.ImmutableList
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.components.Pill
+import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.clearFocusOnSoftKeyboardHide
+import tachiyomi.presentation.core.util.runOnEnterKeyPressed
+import tachiyomi.presentation.core.util.secondaryItemAlpha
+import tachiyomi.presentation.core.util.showSoftKeyboard
+
+const val SEARCH_DEBOUNCE_MILLIS = 250L
 
 @Composable
 fun AppBar(
-    modifier: Modifier = Modifier,
-    // Text
     title: String?,
+
+    modifier: Modifier = Modifier,
+    backgroundColor: Color? = null,
+    // Text
     subtitle: String? = null,
     // Up button
     navigateUp: (() -> Unit)? = null,
-    navigationIcon: ImageVector = Icons.Outlined.ArrowBack,
+    navigationIcon: ImageVector? = null,
     // Menu
     actions: @Composable RowScope.() -> Unit = {},
     // Action mode
     actionModeCounter: Int = 0,
     onCancelActionMode: () -> Unit = {},
     actionModeActions: @Composable RowScope.() -> Unit = {},
-    // Banners
-    downloadedOnlyMode: Boolean = false,
-    incognitoMode: Boolean = false,
 
     scrollBehavior: TopAppBarScrollBehavior? = null,
 ) {
@@ -74,11 +90,12 @@ fun AppBar(
 
     AppBar(
         modifier = modifier,
+        backgroundColor = backgroundColor,
         titleContent = {
             if (isActionMode) {
                 AppBarTitle(actionModeCounter.toString())
             } else {
-                AppBarTitle(title, subtitle)
+                AppBarTitle(title, subtitle = subtitle)
             }
         },
         navigateUp = navigateUp,
@@ -92,28 +109,25 @@ fun AppBar(
         },
         isActionMode = isActionMode,
         onCancelActionMode = onCancelActionMode,
-        downloadedOnlyMode = downloadedOnlyMode,
-        incognitoMode = incognitoMode,
         scrollBehavior = scrollBehavior,
     )
 }
 
 @Composable
 fun AppBar(
-    modifier: Modifier = Modifier,
     // Title
     titleContent: @Composable () -> Unit,
+
+    modifier: Modifier = Modifier,
+    backgroundColor: Color? = null,
     // Up button
     navigateUp: (() -> Unit)? = null,
-    navigationIcon: ImageVector = Icons.Outlined.ArrowBack,
+    navigationIcon: ImageVector? = null,
     // Menu
     actions: @Composable RowScope.() -> Unit = {},
     // Action mode
     isActionMode: Boolean = false,
     onCancelActionMode: () -> Unit = {},
-    // Banners
-    downloadedOnlyMode: Boolean = false,
-    incognitoMode: Boolean = false,
 
     scrollBehavior: TopAppBarScrollBehavior? = null,
 ) {
@@ -126,80 +140,126 @@ fun AppBar(
                     IconButton(onClick = onCancelActionMode) {
                         Icon(
                             imageVector = Icons.Outlined.Close,
-                            contentDescription = stringResource(R.string.action_cancel),
+                            contentDescription = stringResource(MR.strings.action_cancel),
                         )
                     }
                 } else {
                     navigateUp?.let {
                         IconButton(onClick = it) {
-                            Icon(
-                                imageVector = navigationIcon,
-                                contentDescription = stringResource(R.string.abc_action_bar_up_description),
-                            )
+                            UpIcon(navigationIcon = navigationIcon)
                         }
                     }
                 }
             },
             title = titleContent,
             actions = actions,
-            colors = TopAppBarDefaults.smallTopAppBarColors(
-                containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = backgroundColor ?: MaterialTheme.colorScheme.surfaceColorAtElevation(
                     elevation = if (isActionMode) 3.dp else 0.dp,
                 ),
             ),
             scrollBehavior = scrollBehavior,
         )
-
-        AppStateBanners(downloadedOnlyMode, incognitoMode)
     }
 }
 
 @Composable
 fun AppBarTitle(
     title: String?,
+    modifier: Modifier = Modifier,
     subtitle: String? = null,
+    count: Int = 0,
 ) {
-    Column {
-        title?.let {
+    if (count > 0) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = it,
+                text = title!!,
                 maxLines = 1,
+                modifier = Modifier.weight(1f, false),
                 overflow = TextOverflow.Ellipsis,
+            )
+            val pillAlpha = if (isSystemInDarkTheme()) 0.12f else 0.08f
+            Pill(
+                text = "$count",
+                modifier = Modifier.padding(start = 4.dp),
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = pillAlpha),
+                fontSize = 14.sp,
             )
         }
-        subtitle?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+    } else {
+        Column(modifier = modifier) {
+            title?.let {
+                Text(
+                    text = it,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            subtitle?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.basicMarquee(
+                        delayMillis = 2_000,
+                    ),
+                )
+            }
         }
     }
 }
 
 @Composable
 fun AppBarActions(
-    actions: List<AppBar.AppBarAction>,
+    actions: ImmutableList<AppBar.AppBarAction>,
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
     actions.filterIsInstance<AppBar.Action>().map {
-        IconButton(
-            onClick = it.onClick,
-            enabled = it.enabled,
+        TooltipBox(
+            positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+            tooltip = {
+                PlainTooltip {
+                    Text(it.title)
+                }
+            },
+            state = rememberTooltipState(),
         ) {
-            Icon(
-                imageVector = it.icon,
-                contentDescription = it.title,
-            )
+            IconButton(
+                onClick = it.onClick,
+                enabled = it.enabled,
+            ) {
+                Icon(
+                    imageVector = it.icon,
+                    tint = it.iconTint ?: LocalContentColor.current,
+                    contentDescription = it.title,
+                )
+            }
         }
     }
 
     val overflowActions = actions.filterIsInstance<AppBar.OverflowAction>()
     if (overflowActions.isNotEmpty()) {
-        IconButton(onClick = { showMenu = !showMenu }) {
-            Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.abc_action_menu_overflow_description))
+        TooltipBox(
+            positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+            tooltip = {
+                PlainTooltip {
+                    Text(stringResource(MR.strings.action_menu_overflow_description))
+                }
+            },
+            state = rememberTooltipState(),
+        ) {
+            IconButton(
+                onClick = { showMenu = !showMenu },
+            ) {
+                Icon(
+                    Icons.Outlined.MoreVert,
+                    contentDescription = stringResource(
+                        MR.strings.action_menu_overflow_description,
+                    ),
+                )
+            }
         }
 
         DropdownMenu(
@@ -222,56 +282,57 @@ fun AppBarActions(
 /**
  * @param searchEnabled Set to false if you don't want to show search action.
  * @param searchQuery If null, use normal toolbar.
- * @param placeholderText If null, [R.string.action_search_hint] is used.
+ * @param placeholderText If null, [MR.strings.action_search_hint] is used.
  */
 @Composable
 fun SearchToolbar(
+    searchQuery: String?,
+    onChangeSearchQuery: (String?) -> Unit,
+    modifier: Modifier = Modifier,
     titleContent: @Composable () -> Unit = {},
     navigateUp: (() -> Unit)? = null,
     searchEnabled: Boolean = true,
-    searchQuery: String?,
-    onChangeSearchQuery: (String?) -> Unit,
     placeholderText: String? = null,
     onSearch: (String) -> Unit = {},
     onClickCloseSearch: () -> Unit = { onChangeSearchQuery(null) },
     actions: @Composable RowScope.() -> Unit = {},
-    incognitoMode: Boolean = false,
-    downloadedOnlyMode: Boolean = false,
     scrollBehavior: TopAppBarScrollBehavior? = null,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
-    cancelAction: () -> Unit = {},
-    actionMode: Boolean = false,
 ) {
     val focusRequester = remember { FocusRequester() }
-    var searchClickCount by remember { mutableStateOf(0) }
 
     AppBar(
+        modifier = modifier,
         titleContent = {
             if (searchQuery == null) return@AppBar titleContent()
 
             val keyboardController = LocalSoftwareKeyboardController.current
             val focusManager = LocalFocusManager.current
 
+            val searchAndClearFocus: () -> Unit = f@{
+                if (searchQuery.isBlank()) return@f
+                onSearch(searchQuery)
+                focusManager.clearFocus()
+                keyboardController?.hide()
+            }
+
             BasicTextField(
                 value = searchQuery,
                 onValueChange = onChangeSearchQuery,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .focusRequester(focusRequester),
+                    .focusRequester(focusRequester)
+                    .runOnEnterKeyPressed(action = searchAndClearFocus)
+                    .showSoftKeyboard(remember { searchQuery.isEmpty() })
+                    .clearFocusOnSoftKeyboardHide(),
                 textStyle = MaterialTheme.typography.titleMedium.copy(
                     color = MaterialTheme.colorScheme.onBackground,
                     fontWeight = FontWeight.Normal,
                     fontSize = 18.sp,
                 ),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(
-                    onSearch = {
-                        onSearch(searchQuery)
-                        focusManager.clearFocus()
-                        keyboardController?.hide()
-                    },
-                ),
+                keyboardActions = KeyboardActions(onSearch = { searchAndClearFocus() }),
                 singleLine = true,
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.onBackground),
                 visualTransformation = visualTransformation,
@@ -285,18 +346,20 @@ fun SearchToolbar(
                         visualTransformation = visualTransformation,
                         interactionSource = interactionSource,
                         placeholder = {
-                            (placeholderText ?: stringResource(R.string.action_search_hint)).let { placeholderText ->
-                                Text(
-                                    modifier = Modifier.secondaryItemAlpha(),
-                                    text = placeholderText,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontSize = 18.sp,
-                                        fontWeight = FontWeight.Normal,
+                            Text(
+                                modifier = Modifier.secondaryItemAlpha(),
+                                text = (
+                                    placeholderText ?: stringResource(
+                                        MR.strings.action_search_hint,
+                                    )
                                     ),
-                                )
-                            }
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Normal,
+                                ),
+                            )
                         },
                     )
                 },
@@ -305,40 +368,73 @@ fun SearchToolbar(
         navigateUp = if (searchQuery == null) navigateUp else onClickCloseSearch,
         actions = {
             key("search") {
-                val onClick = {
-                    searchClickCount++
-                    onChangeSearchQuery("")
-                }
+                val onClick = { onChangeSearchQuery("") }
 
                 if (!searchEnabled) {
                     // Don't show search action
                 } else if (searchQuery == null) {
-                    IconButton(onClick) {
-                        Icon(Icons.Outlined.Search, contentDescription = stringResource(R.string.action_search))
+                    TooltipBox(
+                        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                        tooltip = {
+                            PlainTooltip {
+                                Text(stringResource(MR.strings.action_search))
+                            }
+                        },
+                        state = rememberTooltipState(),
+                    ) {
+                        IconButton(
+                            onClick = onClick,
+                        ) {
+                            Icon(
+                                Icons.Outlined.Search,
+                                contentDescription = stringResource(MR.strings.action_search),
+                            )
+                        }
                     }
                 } else if (searchQuery.isNotEmpty()) {
-                    IconButton(onClick) {
-                        Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.action_reset))
+                    TooltipBox(
+                        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                        tooltip = {
+                            PlainTooltip {
+                                Text(stringResource(MR.strings.action_reset))
+                            }
+                        },
+                        state = rememberTooltipState(),
+                    ) {
+                        IconButton(
+                            onClick = {
+                                onClick()
+                                focusRequester.requestFocus()
+                            },
+                        ) {
+                            Icon(
+                                Icons.Outlined.Close,
+                                contentDescription = stringResource(MR.strings.action_reset),
+                            )
+                        }
                     }
                 }
             }
 
             key("actions") { actions() }
         },
-        isActionMode = actionMode,
-        downloadedOnlyMode = downloadedOnlyMode,
-        incognitoMode = incognitoMode,
+        isActionMode = false,
         scrollBehavior = scrollBehavior,
-        onCancelActionMode = cancelAction,
     )
-    LaunchedEffect(searchClickCount) {
-        if (searchQuery == null) return@LaunchedEffect
-        try {
-            focusRequester.requestFocus()
-        } catch (_: Throwable) {
-            // TextField is gone
-        }
-    }
+}
+
+@Composable
+fun UpIcon(
+    modifier: Modifier = Modifier,
+    navigationIcon: ImageVector? = null,
+) {
+    val icon = navigationIcon
+        ?: Icons.AutoMirrored.Outlined.ArrowBack
+    Icon(
+        imageVector = icon,
+        contentDescription = stringResource(MR.strings.action_bar_up_description),
+        modifier = modifier,
+    )
 }
 
 sealed interface AppBar {
@@ -347,6 +443,7 @@ sealed interface AppBar {
     data class Action(
         val title: String,
         val icon: ImageVector,
+        val iconTint: Color? = null,
         val onClick: () -> Unit,
         val enabled: Boolean = true,
     ) : AppBarAction

@@ -1,43 +1,47 @@
 package eu.kanade.tachiyomi.data.track.bangumi
 
-import android.content.Context
 import android.graphics.Color
-import androidx.annotation.StringRes
+import dev.icerock.moko.resources.StringResource
 import eu.kanade.tachiyomi.R
-import eu.kanade.tachiyomi.data.database.models.AnimeTrack
-import eu.kanade.tachiyomi.data.database.models.Track
-import eu.kanade.tachiyomi.data.track.TrackService
+import eu.kanade.tachiyomi.data.database.models.anime.AnimeTrack
+import eu.kanade.tachiyomi.data.database.models.manga.MangaTrack
+import eu.kanade.tachiyomi.data.track.AnimeTracker
+import eu.kanade.tachiyomi.data.track.BaseTracker
+import eu.kanade.tachiyomi.data.track.MangaTracker
 import eu.kanade.tachiyomi.data.track.model.AnimeTrackSearch
-import eu.kanade.tachiyomi.data.track.model.TrackSearch
-import kotlinx.serialization.decodeFromString
+import eu.kanade.tachiyomi.data.track.model.MangaTrackSearch
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import tachiyomi.i18n.MR
 import uy.kohesive.injekt.injectLazy
+import tachiyomi.domain.track.anime.model.AnimeTrack as DomainAnimeTrack
+import tachiyomi.domain.track.manga.model.MangaTrack as DomainMangaTrack
 
-class Bangumi(private val context: Context, id: Long) : TrackService(id) {
+class Bangumi(id: Long) : BaseTracker(id, "Bangumi"), MangaTracker, AnimeTracker {
 
     private val json: Json by injectLazy()
 
     private val interceptor by lazy { BangumiInterceptor(this) }
 
-    private val api by lazy { BangumiApi(client, interceptor) }
+    private val api by lazy { BangumiApi(id, client, interceptor) }
 
-    @StringRes
-    override fun nameRes() = R.string.tracker_bangumi
+    override fun getScoreList(): ImmutableList<String> = SCORE_LIST
 
-    override fun getScoreList(): List<String> {
-        return IntRange(0, 10).map(Int::toString)
+    override fun indexToScore(index: Int): Float {
+        return index.toFloat()
     }
 
-    override fun displayScore(track: Track): String {
+    override fun displayScore(track: DomainMangaTrack): String {
         return track.score.toInt().toString()
     }
 
-    override fun displayScore(track: AnimeTrack): String {
+    override fun displayScore(track: DomainAnimeTrack): String {
         return track.score.toInt().toString()
     }
 
-    private suspend fun add(track: Track): Track {
+    private suspend fun add(track: MangaTrack): MangaTrack {
         return api.addLibManga(track)
     }
 
@@ -45,7 +49,7 @@ class Bangumi(private val context: Context, id: Long) : TrackService(id) {
         return api.addLibAnime(track)
     }
 
-    override suspend fun update(track: Track, didReadChapter: Boolean): Track {
+    override suspend fun update(track: MangaTrack, didReadChapter: Boolean): MangaTrack {
         if (track.status != COMPLETED) {
             if (didReadChapter) {
                 if (track.last_chapter_read.toInt() == track.total_chapters && track.total_chapters > 0) {
@@ -73,7 +77,7 @@ class Bangumi(private val context: Context, id: Long) : TrackService(id) {
         return api.updateLibAnime(track)
     }
 
-    override suspend fun bind(track: Track, hasReadChapters: Boolean): Track {
+    override suspend fun bind(track: MangaTrack, hasReadChapters: Boolean): MangaTrack {
         val statusTrack = api.statusLibManga(track)
         val remoteTrack = api.findLibManga(track)
         return if (remoteTrack != null && statusTrack != null) {
@@ -97,7 +101,7 @@ class Bangumi(private val context: Context, id: Long) : TrackService(id) {
         }
     }
 
-    override suspend fun bind(track: AnimeTrack, hasReadChapters: Boolean): AnimeTrack {
+    override suspend fun bind(track: AnimeTrack, hasSeenEpisodes: Boolean): AnimeTrack {
         val statusTrack = api.statusLibAnime(track)
         val remoteTrack = api.findLibAnime(track)
         return if (remoteTrack != null && statusTrack != null) {
@@ -105,7 +109,7 @@ class Bangumi(private val context: Context, id: Long) : TrackService(id) {
             track.library_id = remoteTrack.library_id
 
             if (track.status != COMPLETED) {
-                track.status = if (hasReadChapters) READING else statusTrack.status
+                track.status = if (hasSeenEpisodes) READING else statusTrack.status
             }
 
             track.status = statusTrack.status
@@ -115,14 +119,14 @@ class Bangumi(private val context: Context, id: Long) : TrackService(id) {
             refresh(track)
         } else {
             // Set default fields if it's not found in the list
-            track.status = if (hasReadChapters) READING else PLAN_TO_READ
+            track.status = if (hasSeenEpisodes) READING else PLAN_TO_READ
             track.score = 0F
             add(track)
             update(track)
         }
     }
 
-    override suspend fun search(query: String): List<TrackSearch> {
+    override suspend fun searchManga(query: String): List<MangaTrackSearch> {
         return api.search(query)
     }
 
@@ -130,7 +134,7 @@ class Bangumi(private val context: Context, id: Long) : TrackService(id) {
         return api.searchAnime(query)
     }
 
-    override suspend fun refresh(track: Track): Track {
+    override suspend fun refresh(track: MangaTrack): MangaTrack {
         val remoteStatusTrack = api.statusLibManga(track)
         track.copyPersonalFrom(remoteStatusTrack!!)
         api.findLibManga(track)?.let { remoteTrack ->
@@ -152,7 +156,7 @@ class Bangumi(private val context: Context, id: Long) : TrackService(id) {
 
     override fun getLogoColor() = Color.rgb(240, 145, 153)
 
-    override fun getStatusList(): List<Int> {
+    override fun getStatusListManga(): List<Int> {
         return listOf(READING, COMPLETED, ON_HOLD, DROPPED, PLAN_TO_READ)
     }
 
@@ -160,15 +164,13 @@ class Bangumi(private val context: Context, id: Long) : TrackService(id) {
         return listOf(READING, COMPLETED, ON_HOLD, DROPPED, PLAN_TO_READ)
     }
 
-    override fun getStatus(status: Int): String = with(context) {
-        when (status) {
-            READING -> getString(R.string.reading)
-            PLAN_TO_READ -> getString(R.string.plan_to_read)
-            COMPLETED -> getString(R.string.completed)
-            ON_HOLD -> getString(R.string.on_hold)
-            DROPPED -> getString(R.string.dropped)
-            else -> ""
-        }
+    override fun getStatus(status: Int): StringResource? = when (status) {
+        READING -> MR.strings.reading
+        PLAN_TO_READ -> MR.strings.plan_to_read
+        COMPLETED -> MR.strings.completed
+        ON_HOLD -> MR.strings.on_hold
+        DROPPED -> MR.strings.dropped
+        else -> null
     }
 
     override fun getReadingStatus(): Int = READING
@@ -217,5 +219,9 @@ class Bangumi(private val context: Context, id: Long) : TrackService(id) {
         const val ON_HOLD = 4
         const val DROPPED = 5
         const val PLAN_TO_READ = 1
+
+        private val SCORE_LIST = IntRange(0, 10)
+            .map(Int::toString)
+            .toImmutableList()
     }
 }

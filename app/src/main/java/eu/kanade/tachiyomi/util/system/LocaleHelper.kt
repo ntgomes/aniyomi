@@ -2,8 +2,8 @@ package eu.kanade.tachiyomi.util.system
 
 import android.content.Context
 import androidx.core.os.LocaleListCompat
-import eu.kanade.tachiyomi.R
-import eu.kanade.tachiyomi.ui.browse.source.SourcesPresenter
+import tachiyomi.core.i18n.stringResource
+import tachiyomi.i18n.MR
 import java.util.Locale
 
 /**
@@ -12,16 +12,39 @@ import java.util.Locale
 object LocaleHelper {
 
     /**
+     * Sorts by display name, except keeps the "all" (displayed as "Multi") locale at the top.
+     */
+    val comparator = { a: String, b: String ->
+        if (a == "all") {
+            -1
+        } else if (b == "all") {
+            1
+        } else {
+            getLocalizedDisplayName(a).compareTo(getLocalizedDisplayName(b))
+        }
+    }
+
+    /**
      * Returns display name of a string language code.
      */
     fun getSourceDisplayName(lang: String?, context: Context): String {
         return when (lang) {
-            SourcesPresenter.LAST_USED_KEY -> context.getString(R.string.last_used_source)
-            SourcesPresenter.PINNED_KEY -> context.getString(R.string.pinned_sources)
-            "other" -> context.getString(R.string.other_source)
-            "all" -> context.getString(R.string.multi_lang)
-            else -> getDisplayName(lang)
+            LAST_USED_KEY -> context.stringResource(MR.strings.last_used_source)
+            PINNED_KEY -> context.stringResource(MR.strings.pinned_sources)
+            "other" -> context.stringResource(MR.strings.other_source)
+            "all" -> context.stringResource(MR.strings.multi_lang)
+            else -> getLocalizedDisplayName(lang)
         }
+    }
+
+    fun getDisplayName(lang: String): String {
+        val normalizedLang = when (lang) {
+            "zh-CN" -> "zh-Hans"
+            "zh-TW" -> "zh-Hant"
+            else -> lang
+        }
+
+        return Locale.forLanguageTag(normalizedLang).displayName
     }
 
     /**
@@ -29,7 +52,7 @@ object LocaleHelper {
      *
      * @param lang empty for system language
      */
-    fun getDisplayName(lang: String?): String {
+    fun getLocalizedDisplayName(lang: String?): String {
         if (lang == null) {
             return ""
         }
@@ -58,3 +81,6 @@ object LocaleHelper {
         return Locale(sp[0]).getDisplayLanguage(LocaleListCompat.getDefault()[0]!!)
     }
 }
+
+internal const val PINNED_KEY = "pinned"
+internal const val LAST_USED_KEY = "last_used"

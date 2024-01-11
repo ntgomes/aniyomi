@@ -1,7 +1,6 @@
 package eu.kanade.tachiyomi.ui.reader.viewer.webtoon
 
 import android.content.res.Resources
-import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
@@ -14,19 +13,24 @@ import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import eu.kanade.tachiyomi.databinding.ReaderErrorBinding
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
-import eu.kanade.tachiyomi.ui.reader.model.StencilPage
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
-import eu.kanade.tachiyomi.util.system.ImageUtil
 import eu.kanade.tachiyomi.util.system.dpToPx
-import rx.Observable
-import rx.Subscription
-import rx.android.schedulers.AndroidSchedulers
-import rx.schedulers.Schedulers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.suspendCancellableCoroutine
+import logcat.LogPriority
+import tachiyomi.core.util.lang.launchIO
+import tachiyomi.core.util.lang.withIOContext
+import tachiyomi.core.util.lang.withUIContext
+import tachiyomi.core.util.system.ImageUtil
+import tachiyomi.core.util.system.logcat
 import java.io.BufferedInputStream
 import java.io.InputStream
-import java.util.concurrent.TimeUnit
 
 /**
  * Holder of the webtoon reader for a single page of a chapter.
@@ -67,27 +71,18 @@ class WebtoonPageHolder(
      */
     private var page: ReaderPage? = null
 
-    /**
-     * Subscription for status changes of the page.
-     */
-    private var statusSubscription: Subscription? = null
+    private val scope = MainScope()
 
     /**
-     * Subscription for progress changes of the page.
+     * Job for loading the page.
      */
-    private var progressSubscription: Subscription? = null
-
-    /**
-     * Subscription used to read the header of the image. This is needed in order to instantiate
-     * the appropiate image view depending if the image is animated (GIF).
-     */
-    private var readImageHeaderSubscription: Subscription? = null
+    private var loadJob: Job? = null
 
     init {
         refreshLayoutParams()
 
         frame.onImageLoaded = { onImageDecoded() }
-        frame.onImageLoadError = { onImageDecodeError() }
+        frame.onImageLoadError = { setError() }
         frame.onScaleChanged = { viewer.activity.hideMenu() }
     }
 
@@ -96,7 +91,8 @@ class WebtoonPageHolder(
      */
     fun bind(page: ReaderPage) {
         this.page = page
-        observeStatus()
+        loadJob?.cancel()
+        loadJob = scope.launch { loadPageAndProcessStatus() }
         refreshLayoutParams()
     }
 
@@ -116,96 +112,43 @@ class WebtoonPageHolder(
      * Called when the view is recycled and added to the view pool.
      */
     override fun recycle() {
-        unsubscribeStatus()
-        unsubscribeProgress()
-        unsubscribeReadImageHeader()
+        loadJob?.cancel()
+        loadJob = null
 
         removeErrorLayout()
         frame.recycle()
-        progressIndicator.setProgress(0, animated = false)
+        progressIndicator.setProgress(0)
     }
 
     /**
-     * Observes the status of the page and notify the changes.
+     * Loads the page and processes changes to the page's status.
      *
-     * @see processStatus
+     * Returns immediately if there is no page or the page has no PageLoader.
+     * Otherwise, this function does not return. It will continue to process status changes until
+     * the Job is cancelled.
      */
-    private fun observeStatus() {
-        unsubscribeStatus()
-
+    private suspend fun loadPageAndProcessStatus() {
         val page = page ?: return
         val loader = page.chapter.pageLoader ?: return
-        statusSubscription = loader.getPage(page)
-            .observeOn(AndroidSchedulers.mainThread())
-            .subscribe { processStatus(it) }
-
-        addSubscription(statusSubscription)
-    }
-
-    /**
-     * Observes the progress of the page and updates view.
-     */
-    private fun observeProgress() {
-        unsubscribeProgress()
-
-        val page = page ?: return
-
-        progressSubscription = Observable.interval(100, TimeUnit.MILLISECONDS)
-            .map { page.progress }
-            .distinctUntilChanged()
-            .onBackpressureLatest()
-            .observeOn(AndroidSchedulers.mainThread())
-            .subscribe { value -> progressIndicator.setProgress(value) }
-
-        addSubscription(progressSubscription)
-    }
-
-    /**
-     * Called when the status of the page changes.
-     *
-     * @param status the new status of the page.
-     */
-    private fun processStatus(status: Int) {
-        when (status) {
-            Page.QUEUE -> setQueued()
-            Page.LOAD_PAGE -> setLoading()
-            Page.DOWNLOAD_IMAGE -> {
-                observeProgress()
-                setDownloading()
+        supervisorScope {
+            launchIO {
+                loader.loadPage(page)
             }
-            Page.READY -> {
-                setImage()
-                unsubscribeProgress()
-            }
-            Page.ERROR -> {
-                setError()
-                unsubscribeProgress()
+            page.statusFlow.collectLatest { state ->
+                when (state) {
+                    Page.State.QUEUE -> setQueued()
+                    Page.State.LOAD_PAGE -> setLoading()
+                    Page.State.DOWNLOAD_IMAGE -> {
+                        setDownloading()
+                        page.progressFlow.collectLatest { value ->
+                            progressIndicator.setProgress(value)
+                        }
+                    }
+                    Page.State.READY -> setImage()
+                    Page.State.ERROR -> setError()
+                }
             }
         }
-    }
-
-    /**
-     * Unsubscribes from the status subscription.
-     */
-    private fun unsubscribeStatus() {
-        removeSubscription(statusSubscription)
-        statusSubscription = null
-    }
-
-    /**
-     * Unsubscribes from the progress subscription.
-     */
-    private fun unsubscribeProgress() {
-        removeSubscription(progressSubscription)
-        progressSubscription = null
-    }
-
-    /**
-     * Unsubscribes from the read image header subscription.
-     */
-    private fun unsubscribeReadImageHeader() {
-        removeSubscription(readImageHeaderSubscription)
-        readImageHeaderSubscription = null
     }
 
     /**
@@ -238,26 +181,22 @@ class WebtoonPageHolder(
     /**
      * Called when the page is ready.
      */
-    private fun setImage() {
+    private suspend fun setImage() {
         progressIndicator.setProgress(0)
-        removeErrorLayout()
 
-        unsubscribeReadImageHeader()
         val streamFn = page?.stream ?: return
 
-        var openStream: InputStream? = null
-        readImageHeaderSubscription = Observable
-            .fromCallable {
+        try {
+            val (openStream, isAnimated) = withIOContext {
                 val stream = streamFn().buffered(16)
-                openStream = process(stream)
+                val openStream = process(stream)
 
-                ImageUtil.isAnimatedAndSupported(stream)
+                val isAnimated = ImageUtil.isAnimatedAndSupported(stream)
+                Pair(openStream, isAnimated)
             }
-            .subscribeOn(Schedulers.io())
-            .observeOn(AndroidSchedulers.mainThread())
-            .doOnNext { isAnimated ->
+            withUIContext {
                 frame.setImage(
-                    openStream!!,
+                    openStream,
                     isAnimated,
                     ReaderPageImageView.Config(
                         zoomDuration = viewer.config.doubleTapAnimDuration,
@@ -265,16 +204,25 @@ class WebtoonPageHolder(
                         cropBorders = viewer.config.imageCropBorders,
                     ),
                 )
+                removeErrorLayout()
             }
-            // Keep the Rx stream alive to close the input stream only when unsubscribed
-            .flatMap { Observable.never<Unit>() }
-            .doOnUnsubscribe { openStream?.close() }
-            .subscribe({}, {})
-
-        addSubscription(readImageHeaderSubscription)
+            // Suspend the coroutine to close the input stream only when the WebtoonPageHolder is recycled
+            suspendCancellableCoroutine<Nothing> { continuation ->
+                continuation.invokeOnCancellation { openStream.close() }
+            }
+        } catch (e: Throwable) {
+            logcat(LogPriority.ERROR, e)
+            withUIContext {
+                setError()
+            }
+        }
     }
 
     private fun process(imageStream: BufferedInputStream): InputStream {
+        if (viewer.config.dualPageRotateToFit) {
+            return rotateDualPage(imageStream)
+        }
+
         if (viewer.config.dualPageSplit) {
             val isDoublePage = ImageUtil.isWideImage(imageStream)
             if (isDoublePage) {
@@ -283,33 +231,17 @@ class WebtoonPageHolder(
             }
         }
 
-        if (viewer.config.longStripSplit) {
-            if (page is StencilPage) {
-                return imageStream
-            }
-            val isStripSplitNeeded = ImageUtil.isStripSplitNeeded(imageStream)
-            if (isStripSplitNeeded) {
-                return onStripSplit(imageStream)
-            }
-        }
-
         return imageStream
     }
 
-    private fun onStripSplit(imageStream: BufferedInputStream): InputStream {
-        // If we have reached this point [page] and its stream shouldn't be null
-        val page = page!!
-        val stream = page.stream!!
-        val splitData = ImageUtil.getSplitDataForStream(imageStream).toMutableList()
-        val currentSplitData = splitData.removeFirst()
-        val newPages = splitData.map {
-            StencilPage(page) { ImageUtil.splitStrip(it, stream) }
+    private fun rotateDualPage(imageStream: BufferedInputStream): InputStream {
+        val isDoublePage = ImageUtil.isWideImage(imageStream)
+        return if (isDoublePage) {
+            val rotation = if (viewer.config.dualPageRotateToFitInvert) -90f else 90f
+            ImageUtil.rotateImage(imageStream, rotation)
+        } else {
+            imageStream
         }
-        return ImageUtil.splitStrip(currentSplitData) { imageStream }
-            .also {
-                // Running [onLongStripSplit] first results in issues with splitting
-                viewer.onLongStripSplit(page, newPages)
-            }
     }
 
     /**
@@ -317,7 +249,7 @@ class WebtoonPageHolder(
      */
     private fun setError() {
         progressContainer.isVisible = false
-        initErrorLayout(withOpenInWebView = false)
+        initErrorLayout()
     }
 
     /**
@@ -325,14 +257,7 @@ class WebtoonPageHolder(
      */
     private fun onImageDecoded() {
         progressContainer.isVisible = false
-    }
-
-    /**
-     * Called when the image fails to decode.
-     */
-    private fun onImageDecodeError() {
-        progressContainer.isVisible = false
-        initErrorLayout(withOpenInWebView = true)
+        removeErrorLayout()
     }
 
     /**
@@ -344,7 +269,6 @@ class WebtoonPageHolder(
 
         val progress = ReaderProgressIndicator(context).apply {
             updateLayoutParams<FrameLayout.LayoutParams> {
-                gravity = Gravity.CENTER_HORIZONTAL
                 updateMargins(top = parentHeight / 4)
             }
         }
@@ -355,22 +279,29 @@ class WebtoonPageHolder(
     /**
      * Initializes a button to retry pages.
      */
-    private fun initErrorLayout(withOpenInWebView: Boolean): ReaderErrorBinding {
+    private fun initErrorLayout(): ReaderErrorBinding {
         if (errorLayout == null) {
             errorLayout = ReaderErrorBinding.inflate(LayoutInflater.from(context), frame, true)
-            errorLayout?.root?.layoutParams = FrameLayout.LayoutParams(MATCH_PARENT, (parentHeight * 0.8).toInt())
+            errorLayout?.root?.layoutParams = FrameLayout.LayoutParams(
+                MATCH_PARENT,
+                (parentHeight * 0.8).toInt(),
+            )
             errorLayout?.actionRetry?.setOnClickListener {
                 page?.let { it.chapter.pageLoader?.retryPage(it) }
             }
-            val imageUrl = page?.imageUrl
-            if (imageUrl.orEmpty().startsWith("http", true)) {
+        }
+
+        val imageUrl = page?.imageUrl
+        errorLayout?.actionOpenInWebView?.isVisible = imageUrl != null
+        if (imageUrl != null) {
+            if (imageUrl.startsWith("http", true)) {
                 errorLayout?.actionOpenInWebView?.setOnClickListener {
-                    val intent = WebViewActivity.newIntent(context, imageUrl!!)
+                    val intent = WebViewActivity.newIntent(context, imageUrl)
                     context.startActivity(intent)
                 }
             }
         }
-        errorLayout?.actionOpenInWebView?.isVisible = withOpenInWebView
+
         return errorLayout!!
     }
 

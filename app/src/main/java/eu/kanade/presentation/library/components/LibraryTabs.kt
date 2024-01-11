@@ -1,51 +1,44 @@
 package eu.kanade.presentation.library.components
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.State
-import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import eu.kanade.domain.category.model.Category
+import androidx.compose.ui.zIndex
 import eu.kanade.presentation.category.visualName
-import eu.kanade.presentation.components.AppStateBanners
-import eu.kanade.presentation.components.Divider
-import eu.kanade.presentation.components.TabIndicator
-import eu.kanade.presentation.components.TabText
+import tachiyomi.domain.category.model.Category
+import tachiyomi.presentation.core.components.material.TabText
 
 @Composable
-fun LibraryTabs(
+internal fun LibraryTabs(
     categories: List<Category>,
-    currentPageIndex: Int,
-    showMangaCount: Boolean,
-    isDownloadOnly: Boolean,
-    isIncognitoMode: Boolean,
-    getNumberOfMangaForCategory: @Composable (Long) -> State<Int?>,
+    pagerState: PagerState,
+    getNumberOfItemsForCategory: (Category) -> Int?,
     onTabItemClick: (Int) -> Unit,
 ) {
-    Column {
-        ScrollableTabRow(
-            selectedTabIndex = currentPageIndex,
+    Column(
+        modifier = Modifier.zIndex(1f),
+    ) {
+        PrimaryScrollableTabRow(
+            selectedTabIndex = pagerState.currentPage,
             edgePadding = 0.dp,
-            indicator = { TabIndicator(it[currentPageIndex]) },
             // TODO: use default when width is fixed upstream
             // https://issuetracker.google.com/issues/242879624
             divider = {},
         ) {
             categories.forEachIndexed { index, category ->
                 Tab(
-                    selected = currentPageIndex == index,
+                    selected = pagerState.currentPage == index,
                     onClick = { onTabItemClick(index) },
                     text = {
                         TabText(
                             text = category.visualName,
-                            badgeCount = if (showMangaCount) {
-                                getNumberOfMangaForCategory(category.id)
-                            } else {
-                                null
-                            }?.value,
+                            badgeCount = getNumberOfItemsForCategory(category),
                         )
                     },
                     unselectedContentColor = MaterialTheme.colorScheme.onSurface,
@@ -53,8 +46,6 @@ fun LibraryTabs(
             }
         }
 
-        Divider()
-
-        AppStateBanners(isDownloadOnly, isIncognitoMode)
+        HorizontalDivider()
     }
 }

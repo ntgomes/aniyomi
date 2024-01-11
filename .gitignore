@@ -1,8 +1,10 @@
 .gradle
 /local.properties
+/acra.properties
 /.idea/workspace.xml
 .DS_Store
-.idea/
+.idea/*
+!.idea/icon.png
 *iml
 *.iml
 

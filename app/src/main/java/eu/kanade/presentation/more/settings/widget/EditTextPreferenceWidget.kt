@@ -1,7 +1,12 @@
 package eu.kanade.presentation.more.settings.widget
 
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -14,11 +19,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.window.DialogProperties
-import eu.kanade.tachiyomi.R
 import kotlinx.coroutines.launch
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
 fun EditTextPreferenceWidget(
@@ -51,6 +56,16 @@ fun EditTextPreferenceWidget(
                 OutlinedTextField(
                     value = textFieldValue,
                     onValueChange = { textFieldValue = it },
+                    trailingIcon = {
+                        if (textFieldValue.text.isBlank()) {
+                            Icon(imageVector = Icons.Filled.Error, contentDescription = null)
+                        } else {
+                            IconButton(onClick = { textFieldValue = TextFieldValue("") }) {
+                                Icon(imageVector = Icons.Filled.Cancel, contentDescription = null)
+                            }
+                        }
+                    },
+                    isError = textFieldValue.text.isBlank(),
                     singleLine = singleLine,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -60,6 +75,7 @@ fun EditTextPreferenceWidget(
             ),
             confirmButton = {
                 TextButton(
+                    enabled = textFieldValue.text != value && textFieldValue.text.isNotBlank(),
                     onClick = {
                         scope.launch {
                             if (onConfirm(textFieldValue.text)) {
@@ -68,12 +84,12 @@ fun EditTextPreferenceWidget(
                         }
                     },
                 ) {
-                    Text(text = stringResource(android.R.string.ok))
+                    Text(text = stringResource(MR.strings.action_ok))
                 }
             },
             dismissButton = {
                 TextButton(onClick = onDismissRequest) {
-                    Text(text = stringResource(R.string.action_cancel))
+                    Text(text = stringResource(MR.strings.action_cancel))
                 }
             },
         )

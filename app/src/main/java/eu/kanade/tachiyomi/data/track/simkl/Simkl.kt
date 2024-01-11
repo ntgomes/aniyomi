@@ -1,21 +1,21 @@
 package eu.kanade.tachiyomi.data.track.simkl
 
-import android.content.Context
 import android.graphics.Color
-import androidx.annotation.StringRes
+import dev.icerock.moko.resources.StringResource
 import eu.kanade.tachiyomi.R
-import eu.kanade.tachiyomi.data.database.models.AnimeTrack
-import eu.kanade.tachiyomi.data.database.models.Track
-import eu.kanade.tachiyomi.data.track.AnimeTrackService
-import eu.kanade.tachiyomi.data.track.TrackService
+import eu.kanade.tachiyomi.data.database.models.anime.AnimeTrack
+import eu.kanade.tachiyomi.data.track.AnimeTracker
+import eu.kanade.tachiyomi.data.track.BaseTracker
 import eu.kanade.tachiyomi.data.track.model.AnimeTrackSearch
-import eu.kanade.tachiyomi.data.track.model.TrackSearch
-import kotlinx.serialization.decodeFromString
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import tachiyomi.i18n.MR
 import uy.kohesive.injekt.injectLazy
+import tachiyomi.domain.track.anime.model.AnimeTrack as DomainAnimeTrack
 
-class Simkl(private val context: Context, id: Long) : TrackService(id), AnimeTrackService {
+class Simkl(id: Long) : BaseTracker(id, "Simkl"), AnimeTracker {
 
     companion object {
         const val WATCHING = 1
@@ -23,6 +23,10 @@ class Simkl(private val context: Context, id: Long) : TrackService(id), AnimeTra
         const val ON_HOLD = 3
         const val NOT_INTERESTING = 4
         const val PLAN_TO_WATCH = 5
+
+        private val SCORE_LIST = IntRange(0, 10)
+            .map(Int::toString)
+            .toImmutableList()
     }
 
     private val json: Json by injectLazy()
@@ -31,18 +35,9 @@ class Simkl(private val context: Context, id: Long) : TrackService(id), AnimeTra
 
     private val api by lazy { SimklApi(client, interceptor) }
 
-    @StringRes
-    override fun nameRes() = R.string.tracker_simkl
+    override fun getScoreList(): ImmutableList<String> = SCORE_LIST
 
-    override fun getScoreList(): List<String> {
-        return IntRange(0, 10).map(Int::toString)
-    }
-
-    override fun displayScore(track: Track): String {
-        return track.score.toInt().toString()
-    }
-
-    override fun displayScore(track: AnimeTrack): String {
+    override fun displayScore(track: DomainAnimeTrack): String {
         return track.score.toInt().toString()
     }
 
@@ -64,20 +59,20 @@ class Simkl(private val context: Context, id: Long) : TrackService(id), AnimeTra
         return api.updateLibAnime(track)
     }
 
-    override suspend fun bind(track: AnimeTrack, hasReadChapters: Boolean): AnimeTrack {
+    override suspend fun bind(track: AnimeTrack, hasSeenEpisodes: Boolean): AnimeTrack {
         val remoteTrack = api.findLibAnime(track)
         return if (remoteTrack != null) {
             track.copyPersonalFrom(remoteTrack)
             track.library_id = remoteTrack.library_id
 
             if (track.status != COMPLETED) {
-                track.status = if (hasReadChapters) WATCHING else track.status
+                track.status = if (hasSeenEpisodes) WATCHING else track.status
             }
 
             update(track)
         } else {
             // Set default fields if it's not found in the list
-            track.status = if (hasReadChapters) WATCHING else PLAN_TO_WATCH
+            track.status = if (hasSeenEpisodes) WATCHING else PLAN_TO_WATCH
             track.score = 0F
             add(track)
         }
@@ -105,15 +100,13 @@ class Simkl(private val context: Context, id: Long) : TrackService(id), AnimeTra
         return listOf(WATCHING, COMPLETED, ON_HOLD, NOT_INTERESTING, PLAN_TO_WATCH)
     }
 
-    override fun getStatus(status: Int): String = with(context) {
-        when (status) {
-            WATCHING -> getString(R.string.watching)
-            PLAN_TO_WATCH -> getString(R.string.plan_to_watch)
-            COMPLETED -> getString(R.string.completed)
-            ON_HOLD -> getString(R.string.on_hold)
-            NOT_INTERESTING -> getString(R.string.not_interesting)
-            else -> ""
-        }
+    override fun getStatus(status: Int): StringResource? = when (status) {
+        WATCHING -> MR.strings.watching
+        PLAN_TO_WATCH -> MR.strings.plan_to_watch
+        COMPLETED -> MR.strings.completed
+        ON_HOLD -> MR.strings.on_hold
+        NOT_INTERESTING -> MR.strings.not_interesting
+        else -> null
     }
 
     override fun getWatchingStatus(): Int = WATCHING
@@ -152,12 +145,4 @@ class Simkl(private val context: Context, id: Long) : TrackService(id), AnimeTra
         trackPreferences.trackToken(this).delete()
         interceptor.newAuth(null)
     }
-
-    override fun getReadingStatus(): Int = WATCHING
-    override fun getRereadingStatus(): Int = 0
-    override fun getStatusList(): List<Int> = throw NotImplementedError()
-    override suspend fun update(track: Track, didReadChapter: Boolean): Track = throw NotImplementedError()
-    override suspend fun bind(track: Track, hasReadChapters: Boolean): Track = throw NotImplementedError()
-    override suspend fun search(query: String): List<TrackSearch> = throw NotImplementedError()
-    override suspend fun refresh(track: Track): Track = throw NotImplementedError()
 }

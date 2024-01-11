@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.material.minimumInteractiveComponentSize
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
@@ -20,14 +22,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import eu.kanade.presentation.components.Divider
-import eu.kanade.presentation.components.ScrollbarLazyColumn
-import eu.kanade.presentation.util.isScrolledToEnd
-import eu.kanade.presentation.util.isScrolledToStart
-import eu.kanade.presentation.util.minimumTouchTargetSize
-import eu.kanade.tachiyomi.R
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.components.ScrollbarLazyColumn
+import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.isScrolledToEnd
+import tachiyomi.presentation.core.util.isScrolledToStart
 
 @Composable
 fun <T> ListPreferenceWidget(
@@ -69,13 +69,21 @@ fun <T> ListPreferenceWidget(
                             }
                         }
                     }
-                    if (!state.isScrolledToStart()) Divider(modifier = Modifier.align(Alignment.TopCenter))
-                    if (!state.isScrolledToEnd()) Divider(modifier = Modifier.align(Alignment.BottomCenter))
+                    if (!state.isScrolledToStart()) {
+                        HorizontalDivider(
+                            modifier = Modifier.align(Alignment.TopCenter),
+                        )
+                    }
+                    if (!state.isScrolledToEnd()) {
+                        HorizontalDivider(
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                        )
+                    }
                 }
             },
             confirmButton = {
                 TextButton(onClick = { isDialogShown = false }) {
-                    Text(text = stringResource(R.string.action_cancel))
+                    Text(text = stringResource(MR.strings.action_cancel))
                 }
             },
         )
@@ -97,7 +105,7 @@ private fun DialogRow(
                 onClick = { if (!isSelected) onSelected() },
             )
             .fillMaxWidth()
-            .minimumTouchTargetSize(),
+            .minimumInteractiveComponentSize(),
     ) {
         RadioButton(
             selected = isSelected,

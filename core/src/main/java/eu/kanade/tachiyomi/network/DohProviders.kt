@@ -20,6 +20,7 @@ const val PREF_DOH_QUAD101 = 8
 const val PREF_DOH_MULLVAD = 9
 const val PREF_DOH_CONTROLD = 10
 const val PREF_DOH_NJALLA = 11
+const val PREF_DOH_SHECAN = 12
 
 fun OkHttpClient.Builder.dohCloudflare() = dns(
     DnsOverHttps.Builder().client(build())
@@ -127,14 +128,13 @@ fun OkHttpClient.Builder.dohQuad101() = dns(
 /*
  * Mullvad DoH
  * without ad blocking option
- * Source : https://mullvad.net/en/help/dns-over-https-and-dns-over-tls/
+ * Source: https://mullvad.net/en/help/dns-over-https-and-dns-over-tls
  */
 fun OkHttpClient.Builder.dohMullvad() = dns(
     DnsOverHttps.Builder().client(build())
-        .url("https://doh.mullvad.net/dns-query".toHttpUrl())
+        .url(" https://dns.mullvad.net/dns-query".toHttpUrl())
         .bootstrapDnsHosts(
             InetAddress.getByName("194.242.2.2"),
-            InetAddress.getByName("193.19.108.2"),
             InetAddress.getByName("2a07:e340::2"),
         )
         .build(),
@@ -143,9 +143,8 @@ fun OkHttpClient.Builder.dohMullvad() = dns(
 /*
  * Control D
  * unfiltered option
- * Source : https://controld.com/free-dns/?
+ * Source: https://controld.com/free-dns/?
  */
-
 fun OkHttpClient.Builder.dohControlD() = dns(
     DnsOverHttps.Builder().client(build())
         .url("https://freedns.controld.com/p0".toHttpUrl())
@@ -160,7 +159,6 @@ fun OkHttpClient.Builder.dohControlD() = dns(
 
 /*
  * Njalla
- *
  * Non logging and uncensored
  */
 fun OkHttpClient.Builder.dohNajalla() = dns(
@@ -169,6 +167,19 @@ fun OkHttpClient.Builder.dohNajalla() = dns(
         .bootstrapDnsHosts(
             InetAddress.getByName("95.215.19.53"),
             InetAddress.getByName("2001:67c:2354:2::53"),
+        )
+        .build(),
+)
+
+/**
+ * Source: https://shecan.ir/
+ */
+fun OkHttpClient.Builder.dohShecan() = dns(
+    DnsOverHttps.Builder().client(build())
+        .url("https://free.shecan.ir/dns-query".toHttpUrl())
+        .bootstrapDnsHosts(
+            InetAddress.getByName("178.22.122.100"),
+            InetAddress.getByName("185.51.200.2"),
         )
         .build(),
 )

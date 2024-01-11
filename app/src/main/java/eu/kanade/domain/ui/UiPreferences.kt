@@ -4,10 +4,10 @@ import android.os.Build
 import eu.kanade.domain.ui.model.AppTheme
 import eu.kanade.domain.ui.model.TabletUiMode
 import eu.kanade.domain.ui.model.ThemeMode
-import eu.kanade.tachiyomi.core.preference.PreferenceStore
-import eu.kanade.tachiyomi.core.preference.getEnum
 import eu.kanade.tachiyomi.util.system.DeviceUtil
 import eu.kanade.tachiyomi.util.system.isDynamicColorAvailable
+import tachiyomi.core.preference.PreferenceStore
+import tachiyomi.core.preference.getEnum
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -28,7 +28,7 @@ class UiPreferences(
 
     fun themeDarkAmoled() = preferenceStore.getBoolean("pref_theme_dark_amoled_key", false)
 
-    fun relativeTime() = preferenceStore.getInt("relative_time", 7)
+    fun relativeTime() = preferenceStore.getBoolean("relative_time_v2", true)
 
     fun dateFormat() = preferenceStore.getString("app_date_format", "")
 

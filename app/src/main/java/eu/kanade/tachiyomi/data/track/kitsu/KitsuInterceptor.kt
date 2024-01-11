@@ -1,12 +1,11 @@
 package eu.kanade.tachiyomi.data.track.kitsu
 
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import okhttp3.Interceptor
 import okhttp3.Response
 import uy.kohesive.injekt.injectLazy
 
-class KitsuInterceptor(val kitsu: Kitsu) : Interceptor {
+class KitsuInterceptor(private val kitsu: Kitsu) : Interceptor {
 
     private val json: Json by injectLazy()
 

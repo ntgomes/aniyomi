@@ -1,23 +1,30 @@
 package eu.kanade.domain.track.service
 
-import eu.kanade.tachiyomi.core.preference.PreferenceStore
-import eu.kanade.tachiyomi.data.track.TrackService
+import eu.kanade.tachiyomi.data.track.Tracker
 import eu.kanade.tachiyomi.data.track.anilist.Anilist
+import tachiyomi.core.preference.Preference
+import tachiyomi.core.preference.PreferenceStore
 
 class TrackPreferences(
     private val preferenceStore: PreferenceStore,
 ) {
 
-    fun trackUsername(sync: TrackService) = preferenceStore.getString(trackUsername(sync.id), "")
+    fun trackUsername(tracker: Tracker) = preferenceStore.getString(
+        Preference.privateKey("pref_mangasync_username_${tracker.id}"),
+        "",
+    )
 
-    fun trackPassword(sync: TrackService) = preferenceStore.getString(trackPassword(sync.id), "")
+    fun trackPassword(tracker: Tracker) = preferenceStore.getString(
+        Preference.privateKey("pref_mangasync_password_${tracker.id}"),
+        "",
+    )
 
-    fun setTrackCredentials(sync: TrackService, username: String, password: String) {
-        trackUsername(sync).set(username)
-        trackPassword(sync).set(password)
+    fun setCredentials(tracker: Tracker, username: String, password: String) {
+        trackUsername(tracker).set(username)
+        trackPassword(tracker).set(password)
     }
 
-    fun trackToken(sync: TrackService) = preferenceStore.getString(trackToken(sync.id), "")
+    fun trackToken(tracker: Tracker) = preferenceStore.getString(Preference.privateKey("track_token_${tracker.id}"), "")
 
     fun anilistScoreType() = preferenceStore.getString("anilist_score_type", Anilist.POINT_10)
 
@@ -25,11 +32,8 @@ class TrackPreferences(
 
     fun trackOnAddingToLibrary() = preferenceStore.getBoolean("track_on_adding_to_library", true)
 
-    companion object {
-        fun trackUsername(syncId: Long) = "pref_mangasync_username_$syncId"
-
-        private fun trackPassword(syncId: Long) = "pref_mangasync_password_$syncId"
-
-        private fun trackToken(syncId: Long) = "track_token_$syncId"
-    }
+    fun showNextEpisodeAiringTime() = preferenceStore.getBoolean(
+        "show_next_episode_airing_time",
+        true,
+    )
 }

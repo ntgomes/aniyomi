@@ -1,9 +1,5 @@
 package eu.kanade.presentation.more.settings.widget
 
-import androidx.annotation.ColorInt
-import androidx.annotation.DrawableRes
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -19,18 +15,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.more.settings.LocalPreferenceHighlighted
-import eu.kanade.tachiyomi.R
+import eu.kanade.presentation.track.components.TrackLogoIcon
+import eu.kanade.tachiyomi.data.track.Tracker
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
 fun TrackingPreferenceWidget(
     modifier: Modifier = Modifier,
-    title: String,
-    @DrawableRes logoRes: Int,
-    @ColorInt logoColor: Int,
+    tracker: Tracker,
     checked: Boolean,
     onClick: (() -> Unit)? = null,
 ) {
@@ -43,20 +38,9 @@ fun TrackingPreferenceWidget(
                 .padding(horizontal = PrefsHorizontalPadding, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .background(color = Color(logoColor), shape = MaterialTheme.shapes.small)
-                    .padding(4.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Image(
-                    painter = painterResource(id = logoRes),
-                    contentDescription = null,
-                )
-            }
+            TrackLogoIcon(tracker)
             Text(
-                text = title,
+                text = tracker.name,
                 modifier = Modifier
                     .weight(1f)
                     .padding(horizontal = 16.dp),
@@ -71,7 +55,7 @@ fun TrackingPreferenceWidget(
                         .padding(4.dp)
                         .size(32.dp),
                     tint = Color(0xFF4CAF50),
-                    contentDescription = stringResource(R.string.login_success),
+                    contentDescription = stringResource(MR.strings.login_success),
                 )
             }
         }

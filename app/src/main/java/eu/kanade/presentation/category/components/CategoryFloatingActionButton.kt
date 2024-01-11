@@ -6,21 +6,24 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.res.stringResource
-import eu.kanade.presentation.components.ExtendedFloatingActionButton
-import eu.kanade.presentation.util.isScrolledToEnd
-import eu.kanade.presentation.util.isScrollingUp
-import eu.kanade.tachiyomi.R
+import androidx.compose.ui.Modifier
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.components.material.ExtendedFloatingActionButton
+import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.isScrolledToEnd
+import tachiyomi.presentation.core.util.isScrollingUp
 
 @Composable
 fun CategoryFloatingActionButton(
     lazyListState: LazyListState,
     onCreate: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     ExtendedFloatingActionButton(
-        text = { Text(text = stringResource(R.string.action_add)) },
+        text = { Text(text = stringResource(MR.strings.action_add)) },
         icon = { Icon(imageVector = Icons.Outlined.Add, contentDescription = "") },
         onClick = onCreate,
         expanded = lazyListState.isScrollingUp() || lazyListState.isScrolledToEnd(),
+        modifier = modifier,
     )
 }

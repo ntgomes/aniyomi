@@ -11,10 +11,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEachIndexed
-import eu.kanade.presentation.components.ScrollbarLazyColumn
 import eu.kanade.presentation.more.settings.screen.SearchableSettings
 import eu.kanade.presentation.more.settings.widget.PreferenceGroupHeader
 import kotlinx.coroutines.delay
+import tachiyomi.presentation.core.components.ScrollbarLazyColumn
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -85,12 +85,11 @@ fun PreferenceScreen(
 private fun List<Preference>.findHighlightedIndex(highlightKey: String): Int {
     return flatMap {
         if (it is Preference.PreferenceGroup) {
-            mutableListOf<String?>()
-                .apply {
-                    add(null) // Header
-                    addAll(it.preferenceItems.map { groupItem -> groupItem.title })
-                    add(null) // Spacer
-                }
+            buildList<String?> {
+                add(null) // Header
+                addAll(it.preferenceItems.map { groupItem -> groupItem.title })
+                add(null) // Spacer
+            }
         } else {
             listOf(it.title)
         }

@@ -2,87 +2,76 @@ package eu.kanade.tachiyomi.data.backup
 
 import android.content.Context
 import android.net.Uri
-import eu.kanade.tachiyomi.R
-import eu.kanade.tachiyomi.animesource.AnimeSourceManager
-import eu.kanade.tachiyomi.data.backup.full.models.BackupSerializer
-import eu.kanade.tachiyomi.data.track.TrackManager
-import eu.kanade.tachiyomi.source.SourceManager
-import okio.buffer
-import okio.gzip
-import okio.source
+import eu.kanade.tachiyomi.data.track.TrackerManager
+import tachiyomi.domain.source.anime.service.AnimeSourceManager
+import tachiyomi.domain.source.manga.service.MangaSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
 class BackupFileValidator(
-    private val sourceManager: SourceManager = Injekt.get(),
-    private val animesourceManager: AnimeSourceManager = Injekt.get(),
-    private val trackManager: TrackManager = Injekt.get(),
+    private val context: Context,
+    private val animeSourceManager: AnimeSourceManager = Injekt.get(),
+    private val mangaSourceManager: MangaSourceManager = Injekt.get(),
+    private val trackerManager: TrackerManager = Injekt.get(),
 ) {
 
     /**
      * Checks for critical backup file data.
      *
-     * @throws Exception if manga cannot be found.
      * @return List of missing sources or missing trackers.
      */
-    fun validate(context: Context, uri: Uri): Results {
-        val backupManager = BackupManager(context)
-
+    fun validate(uri: Uri): Results {
         val backup = try {
-            val backupString =
-                context.contentResolver.openInputStream(uri)!!.source().gzip().buffer()
-                    .use { it.readByteArray() }
-            backupManager.parser.decodeFromByteArray(BackupSerializer, backupString)
+            BackupDecoder(context).decode(uri)
         } catch (e: Exception) {
             throw IllegalStateException(e)
-        }
-
-        if (backup.backupManga.isEmpty() && backup.backupAnime.isEmpty()) {
-            throw IllegalStateException(context.getString(R.string.invalid_backup_file_missing_manga))
         }
 
         val sources = backup.backupSources.associate { it.sourceId to it.name }
         val animesources = backup.backupAnimeSources.associate { it.sourceId to it.name }
         val missingSources = sources
-            .filter { sourceManager.get(it.key) == null }
+            .filter { mangaSourceManager.get(it.key) == null }
             .values.map {
                 val id = it.toLongOrNull()
                 if (id == null) {
                     it
                 } else {
-                    sourceManager.getOrStub(id).toString()
+                    mangaSourceManager.getOrStub(id).toString()
                 }
             }
             .distinct()
             .sorted() +
             animesources
-                .filter { animesourceManager.get(it.key) == null }
+                .filter { animeSourceManager.get(it.key) == null }
                 .values.map {
                     val id = it.toLongOrNull()
                     if (id == null) {
                         it
                     } else {
-                        animesourceManager.getOrStub(id).toString()
+                        animeSourceManager.getOrStub(id).toString()
                     }
                 }
                 .distinct()
                 .sorted()
 
-        val trackers = backup.backupManga
+        val animeTrackers = backup.backupAnime
             .flatMap { it.tracking }
             .map { it.syncId }
-            .distinct() + backup.backupAnime
+        val mangaTrackers = backup.backupManga
             .flatMap { it.tracking }
             .map { it.syncId }
-            .distinct()
+        val trackers = (animeTrackers + mangaTrackers).distinct()
         val missingTrackers = trackers
-            .mapNotNull { trackManager.getService(it.toLong()) }
-            .filter { !it.isLogged }
-            .map { context.getString(it.nameRes()) }
+            .mapNotNull { trackerManager.get(it.toLong()) }
+            .filter { !it.isLoggedIn }
+            .map { it.name }
             .sorted()
 
         return Results(missingSources, missingTrackers)
     }
 
-    data class Results(val missingSources: List<String>, val missingTrackers: List<String>)
+    data class Results(
+        val missingSources: List<String>,
+        val missingTrackers: List<String>,
+    )
 }

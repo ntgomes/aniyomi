@@ -4,9 +4,11 @@ import android.view.View
 import androidx.recyclerview.widget.ItemTouchHelper
 import eu.davidea.viewholders.FlexibleViewHolder
 import eu.kanade.tachiyomi.R
-import eu.kanade.tachiyomi.data.animedownload.model.AnimeDownload
+import eu.kanade.tachiyomi.data.download.anime.model.AnimeDownload
 import eu.kanade.tachiyomi.databinding.DownloadItemBinding
 import eu.kanade.tachiyomi.util.view.popupMenu
+import tachiyomi.core.i18n.stringResource
+import tachiyomi.i18n.MR
 
 /**
  * Class used to hold the data of a download.
@@ -15,7 +17,7 @@ import eu.kanade.tachiyomi.util.view.popupMenu
  * @param view the inflated view for this holder.
  * @constructor creates a new download holder.
  */
-class AnimeDownloadHolder(private val view: View, val adapter: DownloadAdapter) :
+class AnimeDownloadHolder(private val view: View, val adapter: AnimeDownloadAdapter) :
     FlexibleViewHolder(view, adapter) {
 
     private val binding = DownloadItemBinding.bind(view)
@@ -60,14 +62,23 @@ class AnimeDownloadHolder(private val view: View, val adapter: DownloadAdapter) 
         if (binding.downloadProgress.max == 1) {
             binding.downloadProgress.max = 100
         }
-        binding.downloadProgress.setProgressCompat(download.totalProgress, true)
+        if (download.totalProgress == 0) {
+            binding.downloadProgress.isIndeterminate = true
+        } else {
+            binding.downloadProgress.isIndeterminate = false
+            binding.downloadProgress.setProgressCompat(download.totalProgress, true)
+        }
     }
 
     /**
      * Updates the text field of the number of downloaded pages.
      */
     fun notifyDownloadedPages() {
-        binding.downloadProgressText.text = view.context.getString(R.string.episode_download_progress, download.progress)
+        binding.downloadProgressText.text = if (download.totalProgress == 0) {
+            view.context.stringResource(MR.strings.update_check_notification_download_in_progress)
+        } else {
+            view.context.stringResource(MR.strings.episode_download_progress, download.progress)
+        }
     }
 
     override fun onItemReleased(position: Int) {

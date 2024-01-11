@@ -7,12 +7,10 @@ import androidx.recyclerview.widget.RecyclerView
 import eu.kanade.tachiyomi.ui.reader.model.ChapterTransition
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
-import eu.kanade.tachiyomi.ui.reader.model.StencilPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
-import eu.kanade.tachiyomi.ui.reader.viewer.hasMissingChapters
+import eu.kanade.tachiyomi.ui.reader.viewer.calculateChapterGap
 import eu.kanade.tachiyomi.util.system.createReaderThemeContext
-import eu.kanade.tachiyomi.util.system.logcat
 
 /**
  * RecyclerView Adapter used by this [viewer] to where [ViewerChapters] updates are posted.
@@ -26,27 +24,6 @@ class WebtoonAdapter(val viewer: WebtoonViewer) : RecyclerView.Adapter<RecyclerV
         private set
 
     var currentChapter: ReaderChapter? = null
-
-    fun onLongStripSplit(currentStrip: Any?, newStrips: List<StencilPage>) {
-        if (newStrips.isEmpty()) return
-        if (currentStrip is StencilPage) return
-
-        val placeAtIndex = items.indexOf(currentStrip) + 1
-        // Stop constantly adding split images
-        if (items.getOrNull(placeAtIndex) is StencilPage) return
-
-        val updatedItems = items.toMutableList()
-        updatedItems.addAll(placeAtIndex, newStrips)
-        updateItems(updatedItems)
-        logcat { "New adapter item count is $itemCount" }
-    }
-
-    fun cleanupSplitStrips() {
-        if (items.any { it is StencilPage }) {
-            val updatedItems = items.filterNot { it is StencilPage }
-            updateItems(updatedItems)
-        }
-    }
 
     /**
      * Context that has been wrapped to use the correct theme values based on the
@@ -62,8 +39,8 @@ class WebtoonAdapter(val viewer: WebtoonViewer) : RecyclerView.Adapter<RecyclerV
         val newItems = mutableListOf<Any>()
 
         // Forces chapter transition if there is missing chapters
-        val prevHasMissingChapters = hasMissingChapters(chapters.currChapter, chapters.prevChapter)
-        val nextHasMissingChapters = hasMissingChapters(chapters.nextChapter, chapters.currChapter)
+        val prevHasMissingChapters = calculateChapterGap(chapters.currChapter, chapters.prevChapter) > 0
+        val nextHasMissingChapters = calculateChapterGap(chapters.nextChapter, chapters.currChapter) > 0
 
         // Add previous chapter pages and transition.
         if (chapters.prevChapter != null) {
